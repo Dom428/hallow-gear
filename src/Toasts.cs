@@ -27,6 +27,7 @@ namespace HallowGear
     public class Note
     {
         public string Title, Text, Kind, State, Key; public string LogoFile, IcoFile;
+        public string Sound;   // 1.3: "windows" (Windows' notification sound), "silent", "hallow" (the toast is silent, Gear plays its own); null = no <audio> element
         public string Id { get { return (Title ?? "") + "\n" + (Text ?? ""); } }
     }
 
@@ -53,13 +54,7 @@ namespace HallowGear
         // returns the way it went
         public NoteRoute Send(Note n)
         {
-            var now = Now();
-            lock (recent)
-            {   // the same alert twice within 30 s is the same alert
-                foreach (var k in recent.Where(kv => (now - kv.Value).TotalSeconds > 30).Select(kv => kv.Key).ToList()) recent.Remove(k);
-                if (recent.ContainsKey(n.Id)) { Add("duplicate, not shown: " + n.Title); return NoteRoute.None; }
-                recent[n.Id] = now;
-            }
+            if (!IsNew(n)) { Add("duplicate, not shown: " + n.Title); return NoteRoute.None; }
             ToastState ts; try { ts = Toasts(); } catch { ts = ToastState.Unavailable; }
             bool hub; try { hub = HubHosts(); } catch { hub = false; }
             var route = Choose(ts, hub);
@@ -67,6 +62,17 @@ namespace HallowGear
             if (route == NoteRoute.Hub) { if (Try(SendHub, n)) return Done(NoteRoute.Hub, n); route = NoteRoute.Balloon; }
             if (route == NoteRoute.Balloon && Try(ShowBalloon, n)) return Done(NoteRoute.Balloon, n);
             return Done(NoteRoute.None, n);
+        }
+        // the same alert twice within 30 s is the same alert (1.3: Gear's pop-up asks this too, so a pop-up and a toast never both show one alert)
+        public bool IsNew(Note n)
+        {
+            var now = Now();
+            lock (recent)
+            {
+                foreach (var k in recent.Where(kv => (now - kv.Value).TotalSeconds > 30).Select(kv => kv.Key).ToList()) recent.Remove(k);
+                if (recent.ContainsKey(n.Id)) return false;
+                recent[n.Id] = now; return true;
+            }
         }
         static bool Try(Func<Note, bool> f, Note n) { try { return f(n); } catch { return false; } }
         NoteRoute Done(NoteRoute r, Note n) { Add(r.ToString().ToLowerInvariant() + ": " + n.Title); return r; }
@@ -88,7 +94,7 @@ namespace HallowGear
             sb.Append("<text>").Append(Esc(n.Text)).Append("</text>");
             sb.Append("<text placement=\"attribution\">").Append(Esc(Attribution)).Append("</text>");
             if (!string.IsNullOrEmpty(n.LogoFile)) sb.Append("<image placement=\"appLogoOverride\" src=\"").Append(Esc(FileUri(n.LogoFile))).Append("\" alt=\"").Append(Esc(Alt(n))).Append("\"/>");
-            sb.Append("</binding></visual></toast>");
+            sb.Append("</binding></visual>").Append(GearSound.ToastAudio(n.Sound)).Append("</toast>");
             return sb.ToString();
         }
         static string Esc(string s) { return SecurityElement.Escape(s ?? "") ?? ""; }
@@ -167,11 +173,11 @@ namespace HallowGear
         [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "Shell_NotifyIconW")] static extern bool Shell_NotifyIcon(int msg, ref NOTIFYICONDATAW d);
         [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "LoadImageW")] static extern IntPtr LoadImage(IntPtr hinst, string name, int type, int cx, int cy, int flags);
         [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
-        const int NIM_MODIFY = 1, NIF_INFO = 0x10, NIIF_USER = 4, NIIF_LARGE_ICON = 0x20, IMAGE_ICON = 1, LR_LOADFROMFILE = 0x10, SM_CXICON = 11;
+        const int NIM_MODIFY = 1, NIF_INFO = 0x10, NIIF_USER = 4, NIIF_LARGE_ICON = 0x20, NIIF_NOSOUND = 0x10, IMAGE_ICON = 1, LR_LOADFROMFILE = 0x10, SM_CXICON = 11;
         static readonly Dictionary<string, IntPtr> icons = new Dictionary<string, IntPtr>();   // loaded once per file, kept for the session (a few at most)
-        public static int BalloonFlags(bool haveIcon) { return haveIcon ? NIIF_USER | NIIF_LARGE_ICON : 0; }
+        public static int BalloonFlags(bool haveIcon, bool silent = false) { return (haveIcon ? NIIF_USER | NIIF_LARGE_ICON : 0) | (silent ? NIIF_NOSOUND : 0); }
         // on the UI thread; false = couldn't (the caller then uses ShowBalloonTip)
-        public static bool BalloonWithIcon(WF.NotifyIcon tray, string title, string text, string icoFile)
+        public static bool BalloonWithIcon(WF.NotifyIcon tray, string title, string text, string icoFile, bool silent = false)
         {
             try
             {
@@ -183,7 +189,7 @@ namespace HallowGear
                 IntPtr h;
                 if (!icons.TryGetValue(icoFile, out h)) { int cx = Math.Max(32, GetSystemMetrics(SM_CXICON)); h = LoadImage(IntPtr.Zero, icoFile, IMAGE_ICON, cx, cx, LR_LOADFROMFILE); if (h != IntPtr.Zero) icons[icoFile] = h; }
                 if (h == IntPtr.Zero) return false;
-                var d = new NOTIFYICONDATAW { hWnd = win.Handle, uID = (int)idF.GetValue(tray), uFlags = NIF_INFO, szTip = "", szInfo = Cut(text, 255), szInfoTitle = Cut(title, 63), uTimeoutOrVersion = 6000, dwInfoFlags = BalloonFlags(true), hBalloonIcon = h };
+                var d = new NOTIFYICONDATAW { hWnd = win.Handle, uID = (int)idF.GetValue(tray), uFlags = NIF_INFO, szTip = "", szInfo = Cut(text, 255), szInfoTitle = Cut(title, 63), uTimeoutOrVersion = 6000, dwInfoFlags = BalloonFlags(true, silent), hBalloonIcon = h };
                 d.cbSize = Marshal.SizeOf(typeof(NOTIFYICONDATAW));
                 return Shell_NotifyIcon(NIM_MODIFY, ref d);
             }

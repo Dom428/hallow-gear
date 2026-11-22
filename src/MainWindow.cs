@@ -268,7 +268,10 @@ namespace HallowGear
                 Ui.Switch("Charging started", S.AlertCharging, v => { S.AlertCharging = v; c.SaveSettings(); }),
                 Ui.Switch("Fully charged", S.AlertFull, v => { S.AlertFull = v; c.SaveSettings(); }),
                 Ui.Switch("Switched to wired / wireless", S.AlertWired, v => { S.AlertWired = v; c.SaveSettings(); }),
-                Ui.Muted("Alerts are Windows notifications (from Hallow Hub's icon when Hub shows the Hallow icon). While a game runs nothing pops up: they wait until the game closes, and a low battery shows as a quiet line in Hallow Overlay's panel.", 11.5, 0)));
+                Ui.Muted("Alerts are Windows notifications (from Hallow Hub's icon when Hub shows the Hallow icon). What they do while a game runs is up to you - see While I'm gaming.", 11.5, 0)));
+            sp.Children.Add(GamingSection());
+            sp.Children.Add(SoundSection());
+            sp.Children.Add(PerDeviceSection());
             sp.Children.Add(Section("Reading",
                 Chips("Check every", new[] { 60, 120, 300 }, S.PollSeconds, v => v / 60 + " min", v => { S.PollSeconds = v; c.SaveSettings(); }),
                 Ui.Muted("On battery power (a laptop) it checks every 5 minutes at most. It also checks when gear is plugged in or out.", 11.5, 6),
@@ -293,6 +296,106 @@ namespace HallowGear
             btns.Children.Add(Ui.Btn("Open data folder", () => { try { System.IO.Directory.CreateDirectory(GearSettings.Dir); System.Diagnostics.Process.Start("explorer.exe", "\"" + GearSettings.Dir + "\""); } catch { } }));
             sp.Children.Add(btns);
             return sp;
+        }
+
+        // 1.3: a row of chips for a string setting
+        FrameworkElement Pick(string label, string[] values, string current, Func<string, string> text, Action<string> pick, double labelWidth = 150, string tip = null)
+        {
+            var row = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
+            if (label != null) row.Children.Add(new TextBlock { Text = label, Width = labelWidth, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
+            foreach (var v in values)
+            {
+                var vv = v; var b = new ToggleButton { Content = text(v), Style = Ui.S("Chip"), IsChecked = v == current, Margin = new Thickness(0, 2, 6, 2) };
+                if (tip != null) b.ToolTip = tip;
+                b.Click += (s, e) => { pick(vv); BuildPage(); };
+                row.Children.Add(b);
+            }
+            return row;
+        }
+        static readonly string[] Corners = { "top-right", "top-left", "bottom-right", "bottom-left" };
+        static string CornerLabel(string c) { switch (c) { case "top-left": return "Top left"; case "bottom-right": return "Bottom right"; case "bottom-left": return "Bottom left"; } return "Top right"; }
+        FrameworkElement Sub(string text) { var t = Ui.Caps(text, 10, Ui.R("Muted")); t.Margin = new Thickness(0, 14, 0, 4); return t; }
+
+        // 1.3: Settings > While I'm gaming - per alert type, the pop-up's monitor / corner / time, the single-monitor fallback
+        FrameworkElement GamingSection()
+        {
+            var S = c.S; var items = new List<UIElement>();
+            items.Add(Ui.Muted("What each alert does while a game runs. Hold until after: nothing during the game, then at most 3 when it closes (a low battery also shows as a quiet line in Hallow Overlay). Overlay line only: just that line. Pop-up, other screen: Gear's own small pop-up on a monitor without the game - it never takes focus from the game. Windows notification: shown anyway.", 11.5, 6));
+            Func<string, Func<string>, Action<string>, FrameworkElement> typeRow = (t, get, set) => Pick(GameModes.TypeLabel(t), GameModes.All, get(), GameModes.Label, v => { set(v); c.SaveSettings(); });
+            items.Add(typeRow("low", () => S.GameLow, v => S.GameLow = v));
+            items.Add(typeRow("critical", () => S.GameCritical, v => S.GameCritical = v));
+            items.Add(typeRow("charging", () => S.GameCharging, v => S.GameCharging = v));
+            items.Add(typeRow("full", () => S.GameFull, v => S.GameFull = v));
+            items.Add(typeRow("wired", () => S.GameWired, v => S.GameWired = v));
+            items.Add(Sub("The pop-up"));
+            var mons = c.Layout();
+            var screens = new List<string> { "auto" }; screens.AddRange(mons.Select(m => m.Device)); screens.Add("same");
+            if (S.PopupMonitor != "auto" && S.PopupMonitor != "same" && !screens.Contains(S.PopupMonitor)) screens.Insert(screens.Count - 1, S.PopupMonitor);   // chosen, not connected now
+            Func<string, string> screenLabel = v =>
+            {
+                if (v == "auto") return "The one without the game"; if (v == "same") return "Same as the game";
+                var m = mons.FirstOrDefault(x => x.Device == v); return m != null ? "Screen " + m.Number + (m.Primary ? " (main)" : "") : "Screen " + Mon.NumberOf(v) + " (not connected)";
+            };
+            items.Add(Pick("Screen", screens.ToArray(), S.PopupMonitor, screenLabel, v => { S.PopupMonitor = v; c.SaveSettings(); }));
+            var idRow = new WrapPanel { Margin = new Thickness(150, 2, 0, 4) };
+            var ident = Ui.Btn("Identify", () => c.Identify(), false, "Shows each screen's number on it for a moment"); idRow.Children.Add(ident);
+            var tryIt = Ui.Btn("Try a pop-up", () => { var where = c.TryPopup(); Say(where == null ? "No screen for the pop-up right now." : "A sample pop-up is on " + where + "."); }, false, "Shows a sample pop-up where it would go now");
+            idRow.Children.Add(tryIt);
+            idRow.Children.Add(new TextBlock { Text = mons.Count + " screen" + (mons.Count == 1 ? "" : "s") + ": " + string.Join(",  ", mons.Select(m => m.Label)), Foreground = Ui.R("Muted"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0), TextWrapping = TextWrapping.Wrap });
+            items.Add(idRow);
+            items.Add(Pick("Corner", Corners, S.PopupCorner, CornerLabel, v => { S.PopupCorner = v; c.SaveSettings(); }));
+            items.Add(Pick("Hide after", new[] { "5", "8", "15", "30" }, S.PopupSeconds.ToString(), v => v + " s", v => { S.PopupSeconds = int.Parse(v); c.SaveSettings(); }));
+            items.Add(Pick("With one screen", GameModes.Fallbacks, S.PopupFallback, GameModes.FallbackLabel, v => { S.PopupFallback = v; c.SaveSettings(); }));
+            items.Add(Ui.Muted("Used when there's only one screen, the chosen screen isn't connected, or every other screen shows the game. The pop-up never goes on the game's screen unless you pick \"Same as the game\" or \"Pop-up on that screen\". Up to 3 stack in the corner.", 11.5, 0));
+            return Section("While I'm gaming", items.ToArray());
+        }
+        FrameworkElement SoundSection()
+        {
+            var S = c.S;
+            Func<string, int, Action> play = (snd, vol) => () => GearSound.Play(GearSound.For(snd, vol));
+            var outside = Pick("Outside games", GearSound.Normal, S.SoundNormal, v => GearSound.Label(v, false), v => { S.SoundNormal = v; c.SaveSettings(); });
+            var during = Pick("During games", GearSound.Game, S.SoundGame, v => GearSound.Label(v, true), v => { S.SoundGame = v; c.SaveSettings(); });
+            var vol1 = Pick("Hallow sound volume", new[] { "40", "70", "100" }, S.SoundVolume.ToString(), v => v + " %", v => { S.SoundVolume = int.Parse(v); c.SaveSettings(); });
+            ((Panel)vol1).Children.Add(Ui.Btn("Play", play(GearSound.Hallow, S.SoundVolume), false, "Plays the Hallow sound at this volume"));
+            var vol2 = Pick("In-game volume", new[] { "10", "20", "30", "50" }, S.GameVolume.ToString(), v => v + " %", v => { S.GameVolume = int.Parse(v); c.SaveSettings(); });
+            ((Panel)vol2).Children.Add(Ui.Btn("Play", play(S.SoundGame == GearSound.Silent ? GearSound.Hallow : S.SoundGame, S.GameVolume), false, "Plays the in-game sound (the pop-up's) at this volume"));
+            return Section("Sound", outside, vol1, during, vol2,
+                Ui.Muted("Windows notifications use Windows' own sound or none. The Hallow sound and the pop-up's sound are Gear's own, played on your default audio device at the volume above. Hallow Gear never changes the game's or Windows' volume - its sound is made quieter before it plays.", 11.5, 0));
+        }
+        // 1.3: per device - alerts on / off, and what its alerts do during a game (all of them, or per alert type)
+        readonly HashSet<string> openDevices = new HashSet<string>();
+        public void OpenDeviceRow(string key) { openDevices.Add(key); }
+        FrameworkElement PerDeviceSection()
+        {
+            var S = c.S; var items = new List<UIElement>();
+            items.Add(Ui.Muted("Turn a device's alerts off, or give it its own game behaviour (for example the mouse's very low battery as a pop-up, the headset's alerts on the Overlay line only).", 11.5, 6));
+            var devs = c.Devices.Where(d => d.HasBattery && !S.BtHidden.Contains(d.Key)).ToList();
+            if (devs.Count == 0) items.Add(Ui.Muted("No gear with a battery yet.", 11.5, 0));
+            var modes = new[] { "default" }.Concat(GameModes.All).ToArray();
+            foreach (var d in devs)
+            {
+                var key = d.Key; bool on = c.AlertsOn(d), open = openDevices.Contains(key); string all; S.DeviceGame.TryGetValue(key, out all);
+                var row = new DockPanel { Margin = new Thickness(0, 8, 0, 2) };
+                var btns = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(btns, Dock.Right);
+                var al = new ToggleButton { Content = on ? "Alerts on" : "Alerts off", Style = Ui.S("Chip"), IsChecked = on, Margin = new Thickness(0, 0, 6, 0), ToolTip = "This device's battery alerts" };
+                al.Click += (s, e) => { c.SetBtAlerts(key, !on); BuildPage(); };
+                var more = new ToggleButton { Content = open ? "Per alert \u25B4" : "Per alert \u25BE", Style = Ui.S("Chip"), IsChecked = open || S.DeviceGame.Keys.Any(k => k.StartsWith(key + "|")), IsEnabled = on, ToolTip = "A game behaviour for each of its alerts" };
+                more.Click += (s, e) => { if (open) openDevices.Remove(key); else openDevices.Add(key); BuildPage(); };
+                btns.Children.Add(al); btns.Children.Add(more); row.Children.Add(btns);
+                var label = Icons.WithText(KindIcon(d), d.Name, 14, Ui.R(on ? "AccentBrush" : "Faint")); label.VerticalAlignment = VerticalAlignment.Center; row.Children.Add(label);
+                items.Add(row);
+                if (!on) continue;
+                var allRow = Pick("During games", modes, GameModes.Valid(all) ? all : "default", GameModes.Label, v => c.SetDeviceGame(key, null, v), 150);
+                allRow.Margin = new Thickness(22, 2, 0, 2); items.Add(allRow);
+                if (!open) continue;
+                foreach (var t in GameModes.Types)
+                {
+                    var tt = t; string m; S.DeviceGame.TryGetValue(key + "|" + t, out m);
+                    var r = Pick(GameModes.TypeLabel(t), modes, GameModes.Valid(m) ? m : "default", GameModes.Label, v => c.SetDeviceGame(key, tt, v), 150);
+                    r.Margin = new Thickness(44, 0, 0, 0); items.Add(r);
+                }
+            }
+            return Section("Per device", items.ToArray());
         }
 
         // 1.1: the Bluetooth switch, and per device: shown / hidden, alerts on / off

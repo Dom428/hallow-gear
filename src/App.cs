@@ -2,7 +2,8 @@
 // headset (its base station's documented battery GET) and wired keyboards (present / wired). It only READS: every message it can
 // send is on a read-only allow-list (Hidpp.cs, A50.cs). It runs next to Logitech G HUB without getting in its way (shared handles,
 // a few small reads a minute), polls gently at Below Normal priority, and while a game runs it doesn't ask the mouse anything -
-// it only listens - and holds its alerts (a low battery goes to Hallow Overlay as a quiet line instead).
+// it only listens - and its alerts do what Settings > While I'm gaming says (1.3: hold them, Hallow Overlay's line, Gear's own pop-up on
+// another monitor that never takes focus, or a Windows notification).
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -20,14 +21,14 @@ using WF = System.Windows.Forms;
 [assembly: AssemblyTitle("Hallow Gear")]
 [assembly: AssemblyProduct("Hallow Gear")]
 [assembly: AssemblyDescription("Battery and charging of your Logitech gear and Bluetooth devices")]
-[assembly: AssemblyVersion("1.2.2.0")]
-[assembly: AssemblyFileVersion("1.2.2.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace HallowGear
 {
     public static class Program
     {
-        public const string Version = "1.2.2";
+        public const string Version = "1.3";
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
 
         [STAThread]
@@ -120,7 +121,10 @@ namespace HallowGear
             var c = new Controller(true, true); var fake = (FakeSource)c.Source;
             c.ReadNow(true, true, true, true);
             var w = new MainWindow(c);
+            // 1.3: the per-device example (the mouse's very low battery as a pop-up, the headset on the Overlay line only), the mouse's row open
+            c.S.DeviceGame["mouse:pro x superlight 2|critical"] = GameModes.Popup; c.S.DeviceGame["headset:astro a50"] = GameModes.Overlay; w.OpenDeviceRow("mouse:pro x superlight 2");
             foreach (var page in MainWindow.Pages.Select(p => p[0])) { w.Show(page); Snap.Save(w, F(page), 940, 0); }
+            Toasts.SavePng(PopupSample(), F("popup"), 2);
             // the mouse on its cable and charging, the headset low and undocked, a game running with the held alert
             fake.Devices[0].Wired = true; fake.Devices[0].Charging = true; fake.Devices[0].Battery = 71; fake.Devices[0].External = true; fake.Devices[0].Via = "USB cable + LIGHTSPEED receiver";
             fake.Devices[1].Full = false; fake.Devices[1].External = false; fake.Devices[1].Battery = 9;
@@ -133,6 +137,15 @@ namespace HallowGear
             w.Show("settings"); Snap.Save(w, F("settings-hidden"), 940, 0);
             Snap.Save(CrashNotice.Make(Path.Combine(dir, "example.txt")), F("crash"), 440, 0);
             if (sfx.Length == 0) SnapNotes(dir);
+        }
+        // 1.3: Gear's own pop-ups (two stacked) in the current look - rendered off-screen, never shown
+        static FrameworkElement PopupSample()
+        {
+            var sp = new System.Windows.Controls.StackPanel { Margin = new Thickness(24) };
+            var a = GearPopup.Card("mouse", "critical", "Mouse battery very low: 9 %", "PRO X SUPERLIGHT 2 is at 9 %. Plug in its cable or put it on its charger.", () => { }, () => { });
+            var b = GearPopup.Card("headset", "low", "Headset battery low: 19 %", "ASTRO A50 is at 19 %. Put it on the base station to charge.", () => { }, () => { });
+            b.Margin = new Thickness(0, 10, 0, 0); sp.Children.Add(a); sp.Children.Add(b);
+            return new System.Windows.Controls.Border { Background = (System.Windows.Media.Brush)Application.Current.FindResource("Bg"), Child = sp };
         }
         // 1.2: the toasts as Windows 11 (dark) shows them, and every device icon in dark and light - nothing is shown on screen
         public static void SnapNotes(string dir)

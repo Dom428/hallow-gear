@@ -1,4 +1,4 @@
-HALLOW GEAR - battery and charging of your Logitech gear and Bluetooth devices
+﻿HALLOW GEAR - battery and charging of your Logitech gear and Bluetooth devices
 
 A card for each piece of gear - a LIGHTSPEED mouse, an ASTRO A50 (Gen 5) headset, a Logitech
 keyboard, Bluetooth earbuds / headsets / controllers - with its battery, charging / full / on
@@ -19,9 +19,10 @@ WHAT IT DOES
 - Wired keyboard (G713): present and wired.
 - Alerts: low battery at 20 % and 10 % (configurable, once per discharge), charging started,
   fully charged, switched to wired / wireless (off by default).
-- During a game nothing pops up: alerts wait until you're done, and a low battery shows as a
-  quiet line in Hallow Overlay. The mouse isn't asked anything during a game - Hallow Gear only
-  listens to what it sends by itself.
+- While you game, you choose what each alert does: wait until you're done, a quiet line in
+  Hallow Overlay, Gear's own pop-up on another monitor (it never takes focus from the game), or
+  a Windows notification anyway. The mouse isn't asked anything during a game - Hallow Gear
+  only listens to what it sends by itself.
 - Runs next to Logitech G HUB. Checks every minute (every 5 min on battery power) and when gear
   is plugged in or out.
 - Hallow family: Hallow Hub's tray menu, the Hallow accent, light and dark mode, status for
@@ -36,6 +37,20 @@ GOOD TO KNOW
 - Firmware updates are left to G HUB on purpose: Hallow Gear never writes to a device.
 - Not supported: other brands' 2.4 GHz dongles (Razer, SteelSeries, Corsair...), the A50 Gen 4
   and the A50 X.
+
+WHAT'S NEW IN 1.3
+- Settings > While I'm gaming: for each kind of alert (low, very low, charging, fully charged,
+  wired / wireless) choose Hold until after the game, Overlay line only, Pop-up on another
+  monitor, or Windows notification anyway. By default a very low battery is a pop-up on the
+  monitor without the game; everything else waits until the game closes, as before.
+- The pop-up is Hallow Gear's own small notification with the device icon. It never takes focus
+  from the game and has no taskbar button; click it to dismiss it. Pick the monitor (or "the one
+  without the game"; Identify shows each screen's number), the corner and how long it stays.
+  With one monitor it falls back to the Overlay line (your choice).
+- Sound: Windows' sound, the Hallow sound or silent outside games; silent, a quiet Hallow
+  sound or Windows' sound during games. Hallow Gear never changes the game's or Windows'
+  volume - its own sound is made quieter before it plays.
+- Per device: switch a device's alerts off, or give it its own game behaviour.
 
 WHAT'S NEW IN 1.2.2
 - Hallow Remote and Hallow Hub can ask Hallow Gear to check the batteries now (at most once

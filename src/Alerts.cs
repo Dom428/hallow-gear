@@ -66,7 +66,8 @@ namespace HallowGear
         }
     }
 
-    // nothing pops up during a game: alerts wait, low battery becomes Overlay's quiet line; after the game they're shown (at most 3)
+    // during a game (1.2 and the 1.3 default): alerts wait, low battery becomes Overlay's quiet line; after the game they're shown (at most 3).
+    // 1.3: each alert type / device can instead go to the Overlay line only, Gear's pop-up on another monitor, or a Windows notification.
     public class AlertRouter
     {
         public readonly List<GearAlert> Held = new List<GearAlert>();
@@ -74,13 +75,25 @@ namespace HallowGear
         // returns what to show now
         public List<GearAlert> Route(IEnumerable<GearAlert> alerts, bool gameRunning)
         {
-            var now = new List<GearAlert>();
+            return RouteWays(alerts, gameRunning, null).Where(r => r.Way == Way.Toast).Select(r => r.A).ToList();
+        }
+        // 1.3: during a game each alert goes the way the user chose (decide; null = hold everything, 1.2's behaviour):
+        //   Hold - kept for after the game (a low battery also becomes Overlay's line); Overlay - Overlay's line only (not held);
+        //   Popup / PopupSame / Toast - shown now by the caller. Outside a game everything is a Toast (a normal notification).
+        public List<Routed> RouteWays(IEnumerable<GearAlert> alerts, bool gameRunning, Func<GearAlert, Way> decide)
+        {
+            var now = new List<Routed>();
             foreach (var a in alerts)
             {
-                if (!gameRunning) { now.Add(a); continue; }
-                Held.RemoveAll(x => x.Key == a.Key && (x.Kind == a.Kind || (x.Low && a.Low) || (IsCharge(x) && IsCharge(a))));
-                Held.Add(a);
-                if (a.Low) OverlayLine = a;
+                var w = !gameRunning ? Way.Toast : decide == null ? Way.Hold : decide(a);
+                if (w == Way.Hold)
+                {
+                    Held.RemoveAll(x => x.Key == a.Key && (x.Kind == a.Kind || (x.Low && a.Low) || (IsCharge(x) && IsCharge(a))));
+                    Held.Add(a);
+                    if (a.Low) OverlayLine = a;
+                }
+                else if (w == Way.Overlay) OverlayLine = a;
+                now.Add(new Routed { A = a, Way = w });
             }
             return now;
         }

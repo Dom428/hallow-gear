@@ -1,14 +1,15 @@
-# Hallow Gear
+﻿# Hallow Gear
 
 **Battery, charging and wired / wireless for your Logitech gear and your Bluetooth devices - read-only.**
 
 Part of the Hallow family of Windows apps. Hallow Gear shows a card for each piece of gear - a LIGHTSPEED mouse, an ASTRO A50
 headset, a Logitech keyboard, and (new in 1.1) Bluetooth earbuds, headsets and controllers - with its battery, whether it's charging,
 full, on battery, wired or wireless, asleep or not connected, when it was last read or seen, and a 24-hour sparkline. It warns you
-when a battery gets low (once per discharge), when charging starts and when it's full - and **never pops up during a game**: alerts
-wait until you're done, and a low battery shows as a quiet line in Hallow Overlay instead. It **only reads**: it can't change a
-single setting on your gear. Light and dark mode. New in 1.2: its notifications show **the device's own icon** - a mouse, a headset,
-earbuds, a controller - in red when the battery is low and in green when it's charging or full.
+when a battery gets low (once per discharge), when charging starts and when it's full. While you game, **you choose** what each alert
+does: wait until you're done, a quiet line in Hallow Overlay, Gear's own small pop-up **on another monitor** that never takes focus
+from the game, or a Windows notification anyway - with its own sound settings for in and out of games (new in 1.3). It **only
+reads**: it can't change a single setting on your gear. Light and dark mode. Its notifications show **the device's own icon** - a
+mouse, a headset, earbuds, a controller - in red when the battery is low and in green when it's charging or full.
 
 ![Your gear (made-up data)](docs/devices.png)
 
@@ -108,9 +109,34 @@ G HUB's local websocket (undocumented) - it doesn't need to.
 - Without that (no Start menu shortcut yet, an older Windows) it falls back to a tray balloon with the device icon as its large icon -
   from Gear's own tray icon, or Hallow Hub's when Hub shows the one Hallow icon. Each alert is shown once, one way. If you switch
   Hallow Gear's notifications off in Windows Settings, nothing is shown.
-- **During a game nothing pops up.** Alerts are held and shown when the game closes (at most three; more become one summary). A low
-  battery goes to **Hallow Overlay** as a small line in its in-game panel (Overlay 1.20+ reads it from Gear's status.json; an older
-  Overlay gets a short `flash`).
+- **While I'm gaming (1.3) - your choice, per alert type:** low, very low, charging started, fully charged and wired / wireless each
+  can be
+  - **Hold until after the game** - nothing during the game, then shown when it closes (at most three; more become one summary). A
+    low battery also shows as a small line in **Hallow Overlay**'s in-game panel (Overlay 1.20+ reads it from Gear's status.json; an
+    older Overlay gets a short `flash`).
+  - **Overlay line only** - just that line in Hallow Overlay, nothing after the game.
+  - **Pop-up on another monitor** - Gear's own small notification (the device icon, title and text in the Hallow look, light or
+    dark). It **never takes focus**: `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`, shown with `SW_SHOWNOACTIVATE`, clicks
+    answered with `MA_NOACTIVATE`, nothing in it can take keyboard focus, no taskbar button. Click it to dismiss it (the game keeps
+    focus) or click **Open Hallow Gear** on purpose to open Gear. It goes to **the monitor without the game** (the game window's
+    monitor is found with `MonitorFromWindow`) or a monitor you pick (**Identify** flashes each screen's number, only when you click
+    it), in the corner you pick (top right by default), hides after 8 s (5 / 8 / 15 / 30), and up to three stack. It is **never on the
+    game's monitor** unless you pick "Same as the game". With **one monitor** (or the chosen one unplugged) it falls back to your
+    choice: the Overlay line then after the game (default), the Overlay line only, a Windows notification, or the pop-up on that screen.
+  - **Windows notification anyway**.
+  - Defaults: **very low = pop-up on another monitor**, everything else held until after the game (as in 1.2).
+- **Per device (1.3):** each device's alerts on / off, and its own game behaviour for all its alerts or per alert type - for example
+  the mouse's very low battery as a pop-up, the headset's alerts on the Overlay line only.
+- **Sound (1.3):** outside games **Windows' sound** (default), the **Hallow sound** or **silent**; during games **silent** (default), a
+  **quiet Hallow sound** or **Windows' sound**. Toasts carry `<audio silent="true"/>` or `ms-winsoundevent:Notification.Default`;
+  the Hallow sound and the pop-up's sound are Gear's own short chime (or Windows' notification sound) played on the default audio
+  device at the volume you pick (Hallow sound 40 / 70 / 100 %, in-game 10 / 20 / 30 / 50 %). Gear **never changes the game's or
+  Windows' volume**: it makes its own samples quieter before playing them, and it imports no volume API at all (a test checks).
+- Nothing is ever shown twice: a pop-up, a toast and the after-game summary each get an alert only once.
+
+![Gear's pop-up in dark mode (rendered off-screen)](docs/popup.png)
+
+![Gear's pop-up in light mode](docs/popup-light.png)
 
 ![Notifications with the device icon (made-up data, rendered off-screen)](docs/notifications.png)
 
@@ -164,7 +190,7 @@ battery state machine and alert rules (once per discharge, the game hold), histo
 a test copy with made-up gear. 1.1 adds a fake receiver with a keyboard and a second mouse on other slots plus a Logitech mouse on
 Bluetooth (through the real reading code), Bluetooth battery / property / address parsing, device kinds, Bluetooth alerts, hide /
 alerts-off / the switch, a scan of the compiled code for every WinRT and SetupAPI call, and Hallow Overlay 1.22's own status reader
-run over Gear's status.json. 1.2.2 adds the pipe `refresh` (started, refused when too soon, refused during a game with nothing read) and opaque Bluetooth ids (no address anywhere in status.json). `tests\GearTests.exe unit` / `pipe` runs one suite. No test opens a real device.
+run over Gear's status.json. 1.2.2 adds the pipe `refresh` (started, refused when too soon, refused during a game with nothing read) and opaque Bluetooth ids (no address anywhere in status.json). 1.3 adds the game routes for every alert type x game / no game x one / two monitors x single-monitor fallback, per-device overrides, the monitor without the game on made-up layouts (side by side, left of the main one, three screens, the chosen one unplugged - never the game's), the pop-up's window styles on a hidden window that is never shown, sound choice -> toast XML, the chime's volume in its samples, no focus or volume API in the compiled code, the routes over the pipe and a `--snap` of the settings page and the pop-up. `tests\GearTests.exe unit` / `pipe` runs one suite. No test opens a real device, shows a window or plays a sound.
 `HallowGear.exe --snap <folder>` renders every page off-screen with made-up gear, dark and light. `HallowGear.exe --probe <log>` is
 a one-shot read-only probe of the real gear and the paired Bluetooth devices (names and battery; nothing kept listening; it refuses
 while a game runs).

@@ -35,6 +35,8 @@ namespace HallowGear
         // 1.1: Bluetooth devices (what Windows knows): read at most every 5 minutes, never during a game (notifications still arrive)
         public readonly IBtSource Bt; public const int BtSeconds = 300;
         DateTime lastBt = DateTime.MinValue, btReadAt = DateTime.MinValue; List<BtEntry> btLast = new List<BtEntry>();
+        // 1.3: while gaming - Gear's own pop-up on another monitor (never takes focus), and what tests saw of it
+        public readonly PopupStack Popups = new PopupStack(); public readonly List<string> PopupLog = new List<string>();
         public IEnumerable<GearDevice> VisibleDevices { get { return Devices.Where(d => !S.BtHidden.Contains(d.Key)).ToList(); } }
 
         public Controller(bool trayOnly, bool snapMode = false)
@@ -228,9 +230,68 @@ namespace HallowGear
             if (a.Count == 0) return;
             if (!AlertsOn(d)) { foreach (var x in a) Log("alert off for " + d.Key + ": " + x); return; }   // 1.1: hidden, or its alerts switched off
             foreach (var x in a) Log("alert: " + x);
-            var show = Router.Route(a, Game != null);
-            foreach (var x in show) Notify(x.Title, x.Text, x);
-            if (Game != null && a.Any(x => x.Low)) OverlayLine(a.Last(x => x.Low).Title);
+            // 1.3: during a game each alert goes the way Settings > While I'm gaming says (per type, per device)
+            Mon target = null; bool looked = false;
+            Func<GearAlert, Way> decide = x => { if (!looked) { looked = true; target = PopupScreen(false); } return GameRoute.Decide(S, x.Key, x.Kind, true, target != null); };
+            var ways = Router.RouteWays(a, Game != null, decide);
+            foreach (var r in ways) { if (Game != null) Log("game route: " + r.A.Kind + " -> " + r.Way.ToString().ToLowerInvariant()); Deliver(r, target); }
+            var line = ways.LastOrDefault(r => (r.Way == Way.Hold && r.A.Low) || r.Way == Way.Overlay);
+            if (Game != null && line != null) OverlayLine(line.A.Title);
+        }
+        void Deliver(Routed r, Mon target)
+        {
+            if (r.Way == Way.Toast) Notify(r.A.Title, r.A.Text, r.A, Game != null);
+            else if (r.Way == Way.Popup) ShowPopup(r.A, target);
+            else if (r.Way == Way.PopupSame) ShowPopup(r.A, PopupScreen(true));
+        }
+        // ---- 1.3: monitors (tests and --snap use made-up layouts), the game's monitor, the pop-up's monitor
+        public const string SnapMonitors = "\\\\.\\DISPLAY1 0 0 2560 1440 primary\n\\\\.\\DISPLAY2 2560 0 1920 1080";
+        public List<Mon> Layout()
+        {
+            if (SnapMode) return Monitors.Parse(SnapMonitors);
+            if (GearSettings.TestDir != null) { var f = Path.Combine(GearSettings.Dir, "test-monitors.txt"); return Monitors.Parse(File.Exists(f) ? File.ReadAllText(f) : "\\\\.\\DISPLAY1 0 0 1920 1080 primary"); }
+            return Monitors.All();
+        }
+        Mon GameMonitor(List<Mon> mons)
+        {
+            if (SnapMode || GearSettings.TestDir != null)
+            {
+                var f = Path.Combine(GearSettings.Dir, "test-game-monitor.txt"); var dev = !SnapMode && File.Exists(f) ? File.ReadAllText(f).Trim() : null;
+                return mons.FirstOrDefault(m => m.Device == dev) ?? mons.FirstOrDefault(m => m.Primary);
+            }
+            return Monitors.GameMonitor(mons, GameWatch.Known.Concat(S.ExtraGames));
+        }
+        // the pop-up's monitor now (null = none may be used); same = the game's monitor (only for "same as the game")
+        public Mon PopupScreen(bool same) { var mons = Layout(); return Monitors.Choose(mons, GameMonitor(mons), same ? "same" : S.PopupMonitor); }
+        void ShowPopup(GearAlert a, Mon mon)
+        {
+            if (mon == null) { Notify(a.Title, a.Text, a, Game != null); return; }
+            var d = Devices.FirstOrDefault(x => x.Key == a.Key);
+            var n = new Note { Title = a.Title, Text = a.Text, Key = a.Key, Kind = a.Key == "summary" ? null : DeviceIcons.KindOf(d != null ? d.Kind : null), State = DeviceIcons.StateOf(a.Kind) };
+            if (!Sender.IsNew(n)) { Log("duplicate, not shown: " + a.Title); return; }
+            Notifications++; Log("popup: " + a.Title + " on " + mon.Device + " " + S.PopupCorner);
+            lock (PopupLog) { PopupLog.Add(a.Title + " @ " + mon.Device + " " + S.PopupCorner); if (PopupLog.Count > 30) PopupLog.RemoveAt(0); }
+            if (SnapMode || GearSettings.TestDir != null || tray == null) return;   // tests never show a window
+            var key = a.Key;
+            try { Popups.Show(close => GearPopup.Card(n.Kind, n.State, n.Title, n.Text, close, () => { close(); OpenDevice(key); }), mon, S.PopupCorner, S.PopupSeconds); }
+            catch (Exception e) { Log("popup failed: " + Family.OneLine(e.Message)); Notify(a.Title, a.Text, a, Game != null); return; }
+            GearSound.Play(GearSound.For(S.SoundGame, S.GameVolume));
+        }
+        // Settings: "Try a pop-up" / "Identify" - only when the user clicks them
+        public string TryPopup()
+        {
+            if (SnapMode || GearSettings.TestDir != null) return null;
+            var mon = PopupScreen(false) ?? PopupScreen(true); if (mon == null) return null;
+            Popups.Show(close => GearPopup.Card("mouse", "critical", "Mouse battery very low: 9 %", "PRO X SUPERLIGHT 2 is at 9 %. Plug in its cable or put it on its charger.", close, () => { close(); ShowMain("devices"); }), mon, S.PopupCorner, S.PopupSeconds);
+            GearSound.Play(GearSound.For(S.SoundGame, S.GameVolume));
+            return mon.Label;
+        }
+        public void Identify() { if (!SnapMode && GearSettings.TestDir == null) PopupStack.Identify(Layout()); }
+        public void SetDeviceGame(string key, string type, string mode)
+        {
+            var k = type == null ? key : key + "|" + type;
+            if (GameModes.Valid(mode)) S.DeviceGame[k] = mode; else S.DeviceGame.Remove(k);
+            SaveSettings();
         }
         void Heard(string key, BatteryReading b)
         {
@@ -376,13 +437,18 @@ namespace HallowGear
         void SetHosted(bool on, bool lists) { hubHosts = on; hubLists = on && lists; if (tray != null && !balloonOwn) tray.Visible = !hubLists; }
         // 1.2: a notification with the device's icon. One way only (NoteSender): a Windows toast when Gear's shortcut has its ID and
         // notifications are on; otherwise the tray balloon with the icon - Gear's own, or Hallow Hub's text-only "notify" when Hub hosts Gear's icon.
-        public void Notify(string title, string text, GearAlert a = null)
+        public void Notify(string title, string text, GearAlert a = null, bool inGame = false)
         {
-            Notifications++; Log("notify: " + title);
+            Notifications++; Log("notify: " + title + (inGame ? " (in game, sound " + S.SoundGame + ")" : ""));
             lock (Shown) { Shown.Add(new[] { DateTime.Now.ToString("HH:mm"), title, text }); if (Shown.Count > 30) Shown.RemoveAt(0); }
             if (tray == null || GearSettings.TestDir != null || SnapMode) return;
             var n = MakeNote(title, text, a, Toasts.WindowsLight());
-            ThreadPool.QueueUserWorkItem(_ => { var r = Sender.Send(n); Log("shown as: " + r.ToString().ToLowerInvariant()); });
+            n.Sound = inGame ? S.SoundGame : S.SoundNormal; int vol = inGame ? S.GameVolume : S.SoundVolume;   // 1.3
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                var r = Sender.Send(n); Log("shown as: " + r.ToString().ToLowerInvariant());
+                if ((r == NoteRoute.Toast || r == NoteRoute.Balloon) && n.Sound == GearSound.Hallow) GearSound.Play(GearSound.Chime(vol));   // the toast itself is silent
+            });
         }
         // the device (from the alert's key) -> its icon files
         public Note MakeNote(string title, string text, GearAlert a, bool light)
@@ -424,7 +490,7 @@ namespace HallowGear
                 balloonOwn = true; tray.Visible = true;
                 var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) }; t.Tick += (s, e) => { t.Stop(); balloonOwn = false; SetHosted(hubHosts, hubLists); }; t.Start();
             }
-            if (!Toasts.BalloonWithIcon(tray, n.Title, n.Text, n.IcoFile)) tray.ShowBalloonTip(6000, n.Title, n.Text, WF.ToolTipIcon.None);
+            if (!Toasts.BalloonWithIcon(tray, n.Title, n.Text, n.IcoFile, n.Sound != null && n.Sound != GearSound.Windows)) tray.ShowBalloonTip(6000, n.Title, n.Text, WF.ToolTipIcon.None);
             return true;
         }
         // clicking a toast opens Gear on that device
@@ -568,6 +634,24 @@ namespace HallowGear
                 case "test-bt-hide": { var p = arg.Split(' '); SetBtHidden(p[0], p.Length > 1 && p[1] == "on"); WriteStatus(); return "ok"; }
                 case "test-bt-alerts": { var p = arg.Split(' '); SetBtAlerts(p[0], p.Length > 1 && p[1] == "on"); return "ok"; }
                 case "test-notes": lock (Shown) return "ok " + Family.Json(Shown.Select(n => n[1]).ToList());
+                case "test-popups": lock (PopupLog) return "ok " + Family.Json(PopupLog.ToList());
+                case "test-monitors": File.WriteAllText(Path.Combine(GearSettings.Dir, "test-monitors.txt"), arg.Replace(";", "\n")); return "ok " + Layout().Count;
+                case "test-game-monitor": File.WriteAllText(Path.Combine(GearSettings.Dir, "test-game-monitor.txt"), arg); return "ok";
+                case "test-set":
+                    {   // test-set <GearSettings field> <value> (1.3 tests: the game routes, sound)
+                        var p = arg.Split(new[] { ' ' }, 2); var f = typeof(GearSettings).GetField(p[0]); if (f == null) return "error no field";
+                        f.SetValue(S, f.FieldType == typeof(int) ? (object)int.Parse(p[1]) : p.Length > 1 ? p[1] : null); SaveSettings(); return "ok";
+                    }
+                case "test-device-game":
+                    {   // test-device-game <device key (may contain spaces)>[|<type>] <mode>
+                        var sp = arg.LastIndexOf(' '); if (sp < 0) return "error usage"; var k = arg.Substring(0, sp); var bar = k.IndexOf('|');
+                        SetDeviceGame(bar < 0 ? k : k.Substring(0, bar), bar < 0 ? null : k.Substring(bar + 1), arg.Substring(sp + 1)); return "ok";
+                    }
+                case "test-route":
+                    {   // test-route <device key (may contain spaces)> <alert kind>
+                        var sp = arg.LastIndexOf(' '); if (sp < 0) return "error usage"; var mon = PopupScreen(false);
+                        return "ok " + GameRoute.Decide(S, arg.Substring(0, sp), arg.Substring(sp + 1), Game != null, mon != null).ToString().ToLowerInvariant() + (mon != null ? " " + mon.Device : "");
+                    }
                 case "test-note-files":
                     {   // 1.2: the icon files the latest device alert would use (written to <test dir>\icons; nothing is shown)
                         var last = Router.Held.LastOrDefault(); var key = arg.Length > 0 ? arg : last != null ? last.Key : null; if (key == null) return "error no device";

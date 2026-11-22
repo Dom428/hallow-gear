@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Threading;
@@ -47,8 +48,21 @@ namespace HallowGear
         [DataMember] public string LastCrashShown;
         [DataMember] public bool TrayHintShown;
         [DataMember] public string IdSalt;                  // 1.2.2: random, per install - makes status.json's opaque Bluetooth device ids (never the address)
+        // 1.3: while I'm gaming - per alert type: "hold" (until after the game), "overlay" (Overlay line only), "popup" (Gear's pop-up on another
+        // monitor), "toast" (a Windows notification anyway). Per device (DeviceGame): "<key>" (all types) or "<key>|<type>" -> mode.
+        [DataMember] public string GameLow = "hold", GameCritical = "popup", GameCharging = "hold", GameFull = "hold", GameWired = "hold";
+        [DataMember] public Dictionary<string, string> DeviceGame;
+        [DataMember] public string PopupMonitor = "auto";   // "auto" (the monitor without the game), "same" (the game's), or a device name (\\.\DISPLAY2)
+        [DataMember] public string PopupCorner = "top-right";   // top-right, top-left, bottom-right, bottom-left
+        [DataMember] public int PopupSeconds = 8;           // hides after
+        [DataMember] public string PopupFallback = "hold";  // one monitor (or the chosen one missing): hold, overlay, toast, same
+        [DataMember] public string SoundNormal = "windows"; // outside games: windows, hallow, silent
+        [DataMember] public string SoundGame = "silent";    // during games: silent, hallow (quiet), windows
+        [DataMember] public int SoundVolume = 70, GameVolume = 30;   // Gear's own sound (Hallow sound, pop-up): its samples are scaled - Windows' volume is never touched
 
-        [OnDeserializing] void Defaults(StreamingContext c) { UseHallowIcon = true; UseHallowAccent = true; Look = "hallow"; AlertLow = true; Low1 = 20; Low2 = 10; AlertCharging = true; AlertFull = true; PollSeconds = 60; Bluetooth = true; }
+        [OnDeserializing] void Defaults(StreamingContext c) { UseHallowIcon = true; UseHallowAccent = true; Look = "hallow"; AlertLow = true; Low1 = 20; Low2 = 10; AlertCharging = true; AlertFull = true; PollSeconds = 60; Bluetooth = true;
+            GameLow = "hold"; GameCritical = "popup"; GameCharging = "hold"; GameFull = "hold"; GameWired = "hold"; PopupMonitor = "auto"; PopupCorner = "top-right"; PopupSeconds = 8;
+            PopupFallback = "hold"; SoundNormal = "windows"; SoundGame = "silent"; SoundVolume = 70; GameVolume = 30; }
 
         public static GearSettings Load()
         {
@@ -76,6 +90,17 @@ namespace HallowGear
             if (Look != "light" && Look != "dark") Look = "hallow";
             Low1 = Math.Max(5, Math.Min(50, Low1)); Low2 = Math.Max(1, Math.Min(Low1 - 1, Low2));
             PollSeconds = Math.Max(60, Math.Min(900, PollSeconds));
+            // 1.3
+            if (!GameModes.Valid(GameLow)) GameLow = "hold"; if (!GameModes.Valid(GameCritical)) GameCritical = "popup"; if (!GameModes.Valid(GameCharging)) GameCharging = "hold";
+            if (!GameModes.Valid(GameFull)) GameFull = "hold"; if (!GameModes.Valid(GameWired)) GameWired = "hold";
+            if (DeviceGame == null) DeviceGame = new Dictionary<string, string>();
+            foreach (var k in DeviceGame.Keys.ToList()) if (!GameModes.Valid(DeviceGame[k])) DeviceGame.Remove(k);
+            if (string.IsNullOrWhiteSpace(PopupMonitor)) PopupMonitor = "auto";
+            if (!new[] { "top-right", "top-left", "bottom-right", "bottom-left" }.Contains(PopupCorner)) PopupCorner = "top-right";
+            PopupSeconds = Math.Max(3, Math.Min(60, PopupSeconds));
+            if (!GameModes.Fallbacks.Contains(PopupFallback)) PopupFallback = "hold";
+            SoundNormal = GearSound.Valid(SoundNormal, "windows"); SoundGame = GearSound.Valid(SoundGame, "silent");
+            SoundVolume = Math.Max(5, Math.Min(100, SoundVolume)); GameVolume = Math.Max(5, Math.Min(100, GameVolume));
         }
 
         static readonly object saveLock = new object();

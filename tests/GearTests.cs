@@ -34,6 +34,8 @@ namespace HallowGear.Tests
                 catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
                 try { IconTests(); ToastXmlTests(); ShortcutTests(); RouteTests(); }   // 1.2 (NotifyTests.cs)
                 catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
+                try { GamingTests(); }   // 1.3 (GamingTests.cs)
+                catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
             }
             if (pipe) { try { Pipe(); } catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); } }
             try { if (Directory.Exists(Dir)) Directory.Delete(Dir, true); } catch { }
@@ -588,6 +590,25 @@ namespace HallowGear.Tests
                 var asks = J(Cmd(exe, "test-asks")); Cmd(exe, "invoke refresh"); Thread.Sleep(600);
                 Cmd(exe, "test-game off"); var after = Cmd(exe, "test-notes"); st = J(Cmd(exe, "status"));
                 Ok(after.Contains("Mouse battery very low: 9 %") && st["alert"] == null && (int)st["held"] == 0, "after the game: the held alert is shown, Overlay's line is gone");
+                Ok(Cmd(exe, "test-popups") == "ok []", "1.3: with one monitor the very low battery fell back to the Overlay line + after the game - no pop-up");
+                // 1.3: two made-up monitors, the game on screen 1 -> the very low battery is Gear's pop-up on screen 2 (logged; tests never show a window)
+                Ok(Cmd(exe, "test-monitors \\\\.\\DISPLAY1 0 0 2560 1440 primary;\\\\.\\DISPLAY2 2560 0 1920 1080") == "ok 2", "1.3: a made-up layout of two monitors");
+                Cmd(exe, "test-battery 0 50"); Cmd(exe, "test-game Delta Force"); Cmd(exe, "test-battery 0 8");
+                var pops = Cmd(exe, "test-popups"); st = J(Cmd(exe, "status"));
+                Ok(pops.Contains("Mouse battery very low: 8 %") && pops.Contains("DISPLAY2 top-right") && st["alert"] == null && (int)st["held"] == 0 && !Cmd(exe, "test-notes").Contains("very low: 8 %"), "in a game, two monitors: very low -> the pop-up on the monitor without the game (" + pops + "); not held, no Overlay line, no toast");
+                Ok(Cmd(exe, "test-route mouse:pro x superlight 2 critical") == "ok popup \\\\.\\DISPLAY2", "test-route: very low -> pop-up on DISPLAY2");
+                Cmd(exe, "test-game-monitor \\\\.\\DISPLAY2");
+                Ok(Cmd(exe, "test-route mouse:pro x superlight 2 critical") == "ok popup \\\\.\\DISPLAY1", "the game on screen 2 -> the pop-up goes to screen 1");
+                Cmd(exe, "test-device-game mouse:pro x superlight 2|critical overlay"); var ov = Cmd(exe, "test-route mouse:pro x superlight 2 critical");
+                Cmd(exe, "test-device-game headset:astro a50 toast"); var hs = Cmd(exe, "test-route headset:astro a50 low");
+                Cmd(exe, "test-device-game mouse:pro x superlight 2|critical default"); Cmd(exe, "test-device-game headset:astro a50 default");
+                Ok(ov.StartsWith("ok overlay") && hs.StartsWith("ok toast") && Cmd(exe, "test-route mouse:pro x superlight 2 critical").StartsWith("ok popup"), "per device over the pipe: the mouse's very low -> Overlay, the headset -> Windows; back to default -> pop-up");
+                Cmd(exe, "test-set GameLow toast"); Cmd(exe, "test-battery 1 60"); Cmd(exe, "test-battery 1 18");
+                var winAnyway = Cmd(exe, "test-notes"); var logNow = J(Cmd(exe, "status"))["log"] as System.Collections.ArrayList;
+                Ok(winAnyway.Contains("Headset battery low: 18 %") && logNow != null && logNow.Cast<string>().Any(x => x.Contains("notify: Headset battery low: 18 % (in game, sound silent)")), "low battery set to 'Windows notification anyway': shown during the game, with the in-game sound (silent)");
+                Cmd(exe, "test-set GameLow hold"); Cmd(exe, "test-game off");
+                Ok(!Cmd(exe, "test-notes").Contains("Mouse battery very low: 8 %") && (int)J(Cmd(exe, "status"))["held"] == 0, "after the game: what popped up isn't shown again (no duplicate)");
+                Cmd(exe, "test-monitors \\\\.\\DISPLAY1 0 0 1920 1080 primary"); Cmd(exe, "test-game-monitor none");
                 // 1.1: Bluetooth alerts, per-device alerts off, hide / show, nothing new during a game, the switch
                 Cmd(exe, "test-bt 1 19"); notes = Cmd(exe, "test-notes");
                 Ok(notes.Contains("Controller battery low: 19 %"), "a Bluetooth controller at 19 %: 'Controller battery low: 19 %'");
@@ -627,6 +648,20 @@ namespace HallowGear.Tests
                 Ok(app.WaitForExit(10000), "it exits");
                 var last = J("ok " + File.ReadAllText(file)); Ok(last != null && !(bool)last["running"], "status.json says not running after quit");
                 Ok(Cmd(exe, "ping").StartsWith("error") , "--cmd when it isn't running: error (exit 2)");
+                // 1.3: --snap (off-screen, made-up gear) renders the settings page and the pop-up, dark and light
+                var snapDir = Path.Combine(Dir, "snap"); var sp = Process.Start(new ProcessStartInfo(exe, "--snap \"" + snapDir + "\"") { UseShellExecute = false, CreateNoWindow = true });
+                if (!sp.WaitForExit(120000)) { sp.Kill(); Ok(false, "--snap took more than 120 s"); }
+                else
+                {
+                    var want = new[] { "settings", "settings-light", "popup", "popup-light" }; var sizes = new List<string>(); bool okSnap = true;
+                    foreach (var w in want)
+                    {
+                        var f = Path.Combine(snapDir, w + ".png"); if (!File.Exists(f)) { okSnap = false; sizes.Add(w + " missing"); continue; }
+                        var dec = System.Windows.Media.Imaging.BitmapDecoder.Create(new Uri(f), System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                        var fr = dec.Frames[0]; sizes.Add(w + " " + fr.PixelWidth + "x" + fr.PixelHeight); if (fr.PixelWidth < 400 || fr.PixelHeight < 200) okSnap = false;
+                    }
+                    Ok(okSnap, "--snap: the settings page and the pop-up, dark and light (" + string.Join(", ", sizes) + ")");
+                }
             }
             finally { if (!app.HasExited) app.Kill(); }
         }
