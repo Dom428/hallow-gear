@@ -37,11 +37,17 @@ namespace HallowGear
         // remembered
         [DataMember] public Dictionary<string, string> KnownSlots;   // "receiverPid:slot" -> device name (to say "asleep" instead of nothing)
         [DataMember] public Dictionary<string, string> KnownGear;    // device key -> "kind|name" (shown as "not connected" while it is away; Forget removes it)
+        [DataMember] public Dictionary<string, string> KnownSlotKinds;   // 1.1: "receiverPid:slot" -> kind (mouse, keyboard...) of a device read before
+        // 1.1: Bluetooth devices (what Windows knows of them)
+        [DataMember] public bool Bluetooth = true;          // the "Bluetooth devices" switch
+        [DataMember] public List<string> BtHidden;          // device keys ("bt:<address>") not shown (nor sent to Overlay, nor alerted)
+        [DataMember] public List<string> BtNoAlerts;        // device keys whose alerts are off
+        [DataMember] public Dictionary<string, string> BtKnown;   // device key -> "kind|name|percent|last seen" (shown as not connected while away)
         [DataMember] public string LastUpdateCheck;
         [DataMember] public string LastCrashShown;
         [DataMember] public bool TrayHintShown;
 
-        [OnDeserializing] void Defaults(StreamingContext c) { UseHallowIcon = true; UseHallowAccent = true; Look = "hallow"; AlertLow = true; Low1 = 20; Low2 = 10; AlertCharging = true; AlertFull = true; PollSeconds = 60; }
+        [OnDeserializing] void Defaults(StreamingContext c) { UseHallowIcon = true; UseHallowAccent = true; Look = "hallow"; AlertLow = true; Low1 = 20; Low2 = 10; AlertCharging = true; AlertFull = true; PollSeconds = 60; Bluetooth = true; }
 
         public static GearSettings Load()
         {
@@ -63,6 +69,9 @@ namespace HallowGear
             ExtraGames.RemoveAll(string.IsNullOrWhiteSpace);
             if (KnownSlots == null) KnownSlots = new Dictionary<string, string>();
             if (KnownGear == null) KnownGear = new Dictionary<string, string>();
+            if (KnownSlotKinds == null) KnownSlotKinds = new Dictionary<string, string>();
+            if (BtHidden == null) BtHidden = new List<string>(); if (BtNoAlerts == null) BtNoAlerts = new List<string>();
+            if (BtKnown == null) BtKnown = new Dictionary<string, string>();
             if (Look != "light" && Look != "dark") Look = "hallow";
             Low1 = Math.Max(5, Math.Min(50, Low1)); Low2 = Math.Max(1, Math.Min(Low1 - 1, Low2));
             PollSeconds = Math.Max(60, Math.Min(900, PollSeconds));

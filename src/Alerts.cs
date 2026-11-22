@@ -26,7 +26,7 @@ namespace HallowGear
     {
         class St { public bool Known, Charging, Full, Wired; public HashSet<int> Fired = new HashSet<int>(); }
         readonly Dictionary<string, St> st = new Dictionary<string, St>();
-        public static string Word(GearDevice d) { return d.Kind == "headset" ? "Headset" : d.Kind == "mouse" ? "Mouse" : d.Kind == "keyboard" ? "Keyboard" : "Device"; }
+        public static string Word(GearDevice d) { return BtProto.Word(d.Kind); }   // Headset, Mouse, Keyboard, Earbuds, Controller, Device
 
         public List<GearAlert> Update(GearDevice d, AlertRules r, DateTime now)
         {
@@ -59,7 +59,11 @@ namespace HallowGear
             s.Known = true; s.Charging = charging; s.Full = full; s.Wired = d.Wired;
             return list;
         }
-        static string Advice(GearDevice d) { return d.Kind == "headset" ? "Put it on the base station to charge." : d.Kind == "mouse" ? "Plug in its cable or put it on its charger." : "Charge it soon."; }
+        static string Advice(GearDevice d)
+        {
+            if (d.Bluetooth) return d.Kind == "earbuds" ? "Put them in their case to charge." : d.Kind == "controller" ? "Plug it in, or change its batteries." : "Charge it soon.";
+            return d.Kind == "headset" ? "Put it on the base station to charge." : d.Kind == "mouse" ? "Plug in its cable or put it on its charger." : "Charge it soon.";
+        }
     }
 
     // nothing pops up during a game: alerts wait, low battery becomes Overlay's quiet line; after the game they're shown (at most 3)

@@ -30,6 +30,10 @@ namespace HallowGear
         readonly AutoResetEvent kick = new AutoResetEvent(false); volatile bool wantRescan = true, wantAll; volatile bool readBusy;
         FileSystemWatcher accentWatch; DeviceWatch devWatch;
         public int Notifications;
+        // 1.1: Bluetooth devices (what Windows knows): read at most every 5 minutes, never during a game (notifications still arrive)
+        public readonly IBtSource Bt; public const int BtSeconds = 300;
+        DateTime lastBt = DateTime.MinValue, btReadAt = DateTime.MinValue; List<BtEntry> btLast = new List<BtEntry>();
+        public IEnumerable<GearDevice> VisibleDevices { get { return Devices.Where(d => !S.BtHidden.Contains(d.Key)).ToList(); } }
 
         public Controller(bool trayOnly, bool snapMode = false)
         {
@@ -40,6 +44,8 @@ namespace HallowGear
             Hist = snapMode ? History.Fake(DateTime.Now) : History.Load();
             Source.Heard += (k, b) => ui.BeginInvoke(new Action(() => Heard(k, b)));
             Source.Link += (k, up) => ui.BeginInvoke(new Action(() => LinkChanged(k, up)));
+            Bt = fake ? (IBtSource)new FakeBtSource() : new BtSource();
+            Bt.Heard += (k, b) => ui.BeginInvoke(new Action(() => Heard(k, b)));
             if (snapMode) return;
             Family.Serve("Gear", Command);
             new Thread(Worker) { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "gear reader" }.Start();
@@ -80,7 +86,8 @@ namespace HallowGear
             bool mouseDue = (now - lastMouseAsk).TotalSeconds >= (Game != null ? Math.Max(120, iv) : iv) && (Game == null || S.ReadMouseInGames);
             bool headDue = (now - lastHeadsetAsk).TotalSeconds >= (Game != null ? Math.Max(120, iv) : iv);
             if ((now - lastRescan).TotalMinutes >= 10 && Game == null) wantRescan = true;
-            if (mouseDue || headDue || wantRescan || wantAll) kick.Set();
+            bool btDue = S.Bluetooth && Game == null && (now - lastBt).TotalSeconds >= BtSeconds;
+            if (mouseDue || headDue || btDue || wantRescan || wantAll) kick.Set();
             if (Hist.Dirty && (now - historySaved).TotalMinutes >= 5) { historySaved = now; Hist.Save(); }
         }
         void Worker()
@@ -94,29 +101,35 @@ namespace HallowGear
                 bool askMice = all || (now - lastMouseAsk).TotalSeconds >= (game ? Math.Max(120, iv) : iv) - 2 && (!game || S.ReadMouseInGames);
                 bool askHead = all || (now - lastHeadsetAsk).TotalSeconds >= (game ? Math.Max(120, iv) : iv) - 2;
                 bool rescan = wantRescan; wantRescan = false;
-                if (!askMice && !askHead && !rescan) continue;
-                ReadNow(askMice, askHead, rescan);
+                bool askBt = S.Bluetooth && !game && (all || (now - lastBt).TotalSeconds >= BtSeconds - 2);
+                if (!askMice && !askHead && !rescan && !askBt) continue;
+                ReadNow(askMice, askHead, rescan, askBt);
             }
         }
-        // one read (on the reader thread, or directly in --snap / tests); results applied on the UI thread
-        public void ReadNow(bool askMice, bool askHead, bool rescan)
+        // one read (on the reader thread, or directly in --snap / tests); results applied on the UI thread.
+        // askBt: also read the Bluetooth devices (only when nothing else is asked, the Logitech gear isn't touched at all)
+        public void ReadNow(bool askMice, bool askHead, bool rescan, bool askBt = false)
         {
-            List<GearDevice> list = null; readBusy = true;
-            try { list = Source.Read(askMice, askHead, rescan); }
+            List<GearDevice> list = null; List<BtEntry> bt = null; bool logi = askMice || askHead || rescan; readBusy = true;
+            try { if (logi) list = Source.Read(askMice, askHead, rescan); }
             catch (Exception e) { Log("read failed: " + e.Message); }
+            try { if (askBt && S.Bluetooth) bt = Bt.Read(); }
+            catch (Exception e) { Log("bluetooth read failed: " + e.Message); }
             finally { readBusy = false; }
             var now = DateTime.Now;
-            if (askMice) lastMouseAsk = now; if (askHead) lastHeadsetAsk = now; if (rescan) lastRescan = now;
-            if (list == null) return;
-            Action apply = () => Apply(list, now);
+            if (askMice) lastMouseAsk = now; if (askHead) lastHeadsetAsk = now; if (rescan) lastRescan = now; if (askBt) lastBt = now;
+            if (list == null && bt == null) return;
+            Action apply = () => Apply(list, bt, now);
             if (SnapMode || ui.CheckAccess()) apply(); else ui.Invoke(apply);
         }
         public void Forget(string key) { S.KnownGear.Remove(key); Devices.RemoveAll(x => x.Key == key && !x.Connected); S.Save(); WriteStatus(); Fire(); }
         public void RefreshNow() { wantAll = true; wantRescan = true; kick.Set(); }
         void DeviceChanged() { Log("devices changed"); wantRescan = true; var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) }; t.Tick += (s, e) => { t.Stop(); if (Game == null) { lastMouseAsk = DateTime.MinValue; lastHeadsetAsk = DateTime.MinValue; } kick.Set(); }; t.Start(); }
 
-        void Apply(List<GearDevice> list, DateTime now)
+        void Apply(List<GearDevice> list, List<BtEntry> bt, DateTime now)
         {
+            if (list == null) list = Devices.Where(x => !x.Bluetooth).Select(x => x.Clone()).ToList();   // only Bluetooth was read this time
+            if (bt != null) { btLast = bt; btReadAt = now; }
             // a paused device keeps what we heard passively since the last read
             foreach (var d in list.Where(x => x.Paused))
             {
@@ -136,10 +149,40 @@ namespace HallowGear
                     Note = kind == "headset" ? "The base station isn't plugged in." : kind == "keyboard" ? "Not plugged in." : "Its receiver isn't plugged in." });
             }
             if (changedKnown && !SnapMode) S.Save();
+            list = GearMerge.WithBluetooth(list, S.Bluetooth ? BtCards() : new List<GearDevice>());
             Devices = list; LastRead = now;
             foreach (var d in list) Fresh(d, now);
             WriteStatus(); Fire();
         }
+        // 1.1: the Bluetooth cards from the last Bluetooth read (a battery heard since then wins; during a game they're marked paused)
+        List<GearDevice> BtCards()
+        {
+            var cards = new List<GearDevice>(); bool changed = false;
+            foreach (var e in btLast)
+            {
+                if (e.Address == null) continue;
+                var key = BtProto.Key(e.Address); string rem; S.BtKnown.TryGetValue(key, out rem);
+                var d = BtProto.ToDevice(e, rem, btReadAt); if (d == null) continue;
+                var old = Devices.FirstOrDefault(x => x.Key == key);
+                bool heard = old != null && old.Updated.HasValue && old.Updated > btReadAt && old.Battery.HasValue;
+                if (heard) { d.Battery = old.Battery; d.Updated = old.Updated; d.Source = old.Source; d.Connected = true; d.LastSeen = old.Updated; d.Note = null; }
+                d.Paused = Game != null && !heard && d.Connected;
+                if (d.Battery.HasValue) { var r = BtProto.Remember(d); if (rem != r) { S.BtKnown[key] = r; changed = true; } }
+                cards.Add(d);
+            }
+            if (changed && !SnapMode) S.Save();
+            return cards;
+        }
+        public void SetBluetooth(bool on)
+        {
+            S.Bluetooth = on; SaveSettings();
+            if (!on) { try { Bt.Stop(); } catch { } btLast = new List<BtEntry>(); Devices = Devices.Where(x => !x.Bluetooth).ToList(); WriteStatus(); Fire(); }
+            else { lastBt = DateTime.MinValue; kick.Set(); }
+        }
+        public void SetBtHidden(string key, bool hidden) { S.BtHidden.Remove(key); if (hidden) S.BtHidden.Add(key); SaveSettings(); Fire(); }
+        public void SetBtAlerts(string key, bool on) { S.BtNoAlerts.Remove(key); if (!on) S.BtNoAlerts.Add(key); SaveSettings(); Fire(); }
+        public bool AlertsOn(GearDevice d) { return !S.BtNoAlerts.Contains(d.Key) && !S.BtHidden.Contains(d.Key); }
+
         // a device has new values: history, alerts
         void Fresh(GearDevice d, DateTime now)
         {
@@ -147,6 +190,7 @@ namespace HallowGear
             if (d.Paused && !(d.Updated.HasValue && (now - d.Updated.Value).TotalMinutes < 5)) return;
             var a = alerts.Update(d, AlertRules.From(S), now);
             if (a.Count == 0) return;
+            if (!AlertsOn(d)) { foreach (var x in a) Log("alert off for " + d.Key + ": " + x); return; }   // 1.1: hidden, or its alerts switched off
             foreach (var x in a) Log("alert: " + x);
             var show = Router.Route(a, Game != null);
             foreach (var x in show) Notify(x.Title, x.Text);
@@ -219,6 +263,7 @@ namespace HallowGear
             if (devWatch != null) devWatch.Dispose();
             WriteStatus(false);
             try { Source.Dispose(); } catch { }
+            try { Bt.Dispose(); } catch { }
             if (main != null) main.Exiting = true;
             Application.Current.Shutdown();
         }
@@ -262,7 +307,7 @@ namespace HallowGear
         }
         public string TrayText()
         {
-            var parts = Devices.Where(d => d.HasBattery && d.Battery.HasValue && d.Connected).Select(d => BatteryAlerts.Word(d) + " " + d.Battery + "%" + (d.Charging ? "+" : "")).ToList();
+            var parts = VisibleDevices.Where(d => d.HasBattery && d.Battery.HasValue && d.Connected).Select(d => BatteryAlerts.Word(d) + " " + d.Battery + "%" + (d.Charging ? "+" : "")).ToList();
             var t = "Hallow Gear" + (parts.Count > 0 ? " - " + string.Join(", ", parts) : "");
             return t.Length > 63 ? t.Substring(0, 63) : t;
         }
@@ -349,19 +394,23 @@ namespace HallowGear
         }
 
         // ---------------- family link: status.json and the pipe
-        public static Dictionary<string, object> DeviceJson(GearDevice d)
+        // 1.0 fields unchanged (Hallow Overlay 1.20+ reads them); 1.1 adds "bluetooth", "lastSeen", "alerts" and the kinds earbuds / controller / other
+        public static Dictionary<string, object> DeviceJson(GearDevice d, bool alerts = true)
         {
             return new Dictionary<string, object> {
                 { "kind", d.Kind }, { "name", d.Name }, { "battery", d.HasBattery ? (object)d.Battery : null }, { "state", d.State }, { "wired", d.Wired },
                 { "charging", d.Charging }, { "full", d.Full }, { "connected", d.Connected }, { "asleep", d.Asleep }, { "estimated", d.Estimated },
-                { "paused", d.Paused }, { "updated", d.Updated.HasValue ? Family.Time(d.Updated.Value) : null } };
+                { "paused", d.Paused }, { "updated", d.Updated.HasValue ? Family.Time(d.Updated.Value) : null },
+                { "bluetooth", d.Bluetooth }, { "lastSeen", d.LastSeen.HasValue ? Family.Time(d.LastSeen.Value) : null }, { "alerts", alerts } };
         }
         public Dictionary<string, object> StatusData(bool running)
         {
             var d = new Dictionary<string, object> { { "app", "Gear" }, { "version", Program.Version }, { "updated", Family.Time(DateTime.Now) }, { "running", running } };
-            d["devices"] = Devices.Select(x => (object)DeviceJson(x)).ToList();
+            var visible = VisibleDevices.ToList();   // hidden Bluetooth devices aren't listed (so Overlay doesn't show them either)
+            d["devices"] = visible.Select(x => (object)DeviceJson(x, AlertsOn(x))).ToList();
             d["lowAt"] = S.Low1; d["veryLowAt"] = S.Low2;
-            d["low"] = Devices.Where(x => x.HasBattery && x.Battery.HasValue && !x.Charging && !x.Full && x.Connected && x.Battery <= S.Low1).Select(x => x.Name).ToList();
+            d["bluetooth"] = S.Bluetooth; d["hiddenDevices"] = Devices.Count - visible.Count;
+            d["low"] = visible.Where(x => x.HasBattery && x.Battery.HasValue && !x.Charging && !x.Full && x.Connected && x.Battery <= S.Low1).Select(x => x.Name).ToList();
             d["game"] = Game; d["polling"] = Polling; d["held"] = Router.Held.Count;
             var line = Game != null ? Router.OverlayLine : null;
             d["alert"] = line == null ? null : new Dictionary<string, object> { { "text", line.Title }, { "level", line.Kind }, { "device", line.Key }, { "time", Family.Time(line.At) } };
@@ -401,7 +450,7 @@ namespace HallowGear
         public List<object> MenuItems()
         {
             var items = new List<object>();
-            foreach (var d in Devices.Where(x => x.HasBattery).Take(4))
+            foreach (var d in VisibleDevices.Where(x => x.HasBattery).Take(5))
                 items.Add(new Dictionary<string, object> { { "id", "open-devices" }, { "label", d.Name + ": " + (d.Battery.HasValue ? d.Battery + " %" : "-") + " \u00B7 " + d.StateLabel }, { "enabled", false } });
             if (items.Count > 0) items.Add(new Dictionary<string, object> { { "id", "-" } });
             items.Add(new Dictionary<string, object> { { "id", "refresh" }, { "label", "Refresh now" } });
@@ -428,7 +477,10 @@ namespace HallowGear
             switch (cmd)
             {
                 case "test-autostart": SetStartWithWindows(arg == "on"); return "ok " + StartsWithWindows();
-                case "test-read": ReadNow(true, true, false); return "ok " + Devices.Count;
+                case "test-read": ReadNow(true, true, false, Game == null); return "ok " + Devices.Count;
+                case "test-bt-switch": SetBluetooth(arg == "on"); if (arg == "on") ReadNow(false, false, false, true); return "ok " + Devices.Count;
+                case "test-bt-hide": { var p = arg.Split(' '); SetBtHidden(p[0], p.Length > 1 && p[1] == "on"); WriteStatus(); return "ok"; }
+                case "test-bt-alerts": { var p = arg.Split(' '); SetBtAlerts(p[0], p.Length > 1 && p[1] == "on"); return "ok"; }
                 case "test-notes": lock (Shown) return "ok " + Family.Json(Shown.Select(n => n[1]).ToList());
             }
             if (fake == null) return "error unknown test command";
@@ -442,6 +494,14 @@ namespace HallowGear
                     }
                 case "test-hear": { var p = arg.Split(' '); fake.Hear(p[0], new BatteryReading { Percent = int.Parse(p[1]), Source = "test" }); return "ok"; }
                 case "test-game": { var f = Path.Combine(GearSettings.Dir, "test-game.txt"); if (arg.Length == 0 || arg == "off") { if (File.Exists(f)) File.Delete(f); } else File.WriteAllText(f, arg); SetGame(GameNow()); return "ok " + (Game ?? "none"); }
+                case "test-bt":
+                    {   // test-bt <index> <percent> [off]  (a made-up Bluetooth device's battery / connection, then a Bluetooth read)
+                        var fb = Bt as FakeBtSource; if (fb == null) return "error no fake bluetooth";
+                        var p = arg.Split(' '); var e = fb.Entries[int.Parse(p[0])]; e.Battery = int.Parse(p[1]); e.Connected = !p.Contains("off");
+                        ReadNow(false, false, false, Game == null); return "ok";
+                    }
+                case "test-bt-hear": { var fb = Bt as FakeBtSource; var p = arg.Split(' '); fb.Hear(p[0], int.Parse(p[1])); return "ok"; }
+                case "test-bt-reads": return "ok " + ((FakeBtSource)Bt).Reads;
                 case "test-asks": return "ok " + Family.Json(new Dictionary<string, object> { { "reads", fake.Reads }, { "mouse", fake.MouseAsks }, { "headset", fake.HeadsetAsks } });
             }
             return "error unknown test command";

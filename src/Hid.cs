@@ -106,7 +106,8 @@ namespace HallowGear
                         Marshal.WriteInt32(buf, IntPtr.Size == 8 ? 8 : 6);
                         if (!SetupDiGetDeviceInterfaceDetail(set, ref d, buf, need, out need, IntPtr.Zero)) continue;
                         var path = Marshal.PtrToStringUni(buf + 4);
-                        if (path == null || path.IndexOf("vid_" + vid.ToString("x4"), StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        // USB: "vid_046d"; Bluetooth HID: "vid&02046d" (LE) / "vid&0002046d" (classic) - the attributes decide
+                        if (path == null || !VidInPath(path, vid)) continue;
                         var info = Describe(path); if (info != null && info.Vid == vid) list.Add(info);
                     }
                     finally { Marshal.FreeHGlobal(buf); }
@@ -114,6 +115,11 @@ namespace HallowGear
             }
             finally { SetupDiDestroyDeviceInfoList(set); }
             return list;
+        }
+        public static bool VidInPath(string path, ushort vid)
+        {
+            var v = vid.ToString("x4"); var p = path.ToLowerInvariant();
+            return p.Contains("vid_" + v) || p.Contains("vid&02" + v) || p.Contains("vid&0002" + v) || p.Contains("vid&01" + v) || p.Contains("vid&0001" + v);
         }
         static HidInfo Describe(string path)
         {

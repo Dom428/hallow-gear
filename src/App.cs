@@ -19,15 +19,15 @@ using WF = System.Windows.Forms;
 
 [assembly: AssemblyTitle("Hallow Gear")]
 [assembly: AssemblyProduct("Hallow Gear")]
-[assembly: AssemblyDescription("Battery and charging of your Logitech gear")]
-[assembly: AssemblyVersion("1.0.1.0")]
-[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyDescription("Battery and charging of your Logitech gear and Bluetooth devices")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace HallowGear
 {
     public static class Program
     {
-        public const string Version = "1.0.1";
+        public const string Version = "1.1";
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
 
         [STAThread]
@@ -91,6 +91,20 @@ namespace HallowGear
                 foreach (var l in src.Log) P(l);
                 foreach (var l in src.SentSummary()) P("sent: " + l);
             }
+            // 1.1: Bluetooth - paired devices and the battery Windows knows (no pairing, no connecting; nothing is kept listening)
+            P("--- Bluetooth (paired devices, read-only):");
+            using (var bt = new BtSource { Listen = false })
+            {
+                var entries = bt.Read();
+                if (entries.Count == 0) P("no paired Bluetooth devices");
+                foreach (var e in entries)
+                {
+                    var d = BtProto.ToDevice(e, null, DateTime.Now);
+                    P(string.Format("{0,-10} {1,-28} battery {2,-5} {3,-13} {4}{5}", e.Kind, e.Name, e.Battery.HasValue ? e.Battery + "%" : "-", e.Connected ? "connected" : "not connected",
+                        (e.Le ? "LE " : "") + (e.Classic ? "classic " : "") + (e.Source != null ? "[" + e.Source + "]" : ""), d == null ? "  (no battery reported - no card)" : ""));
+                }
+                foreach (var l in bt.Log) P(l);
+            }
             Write(file, sb); return 0;
         }
         static void Write(string file, StringBuilder sb) { if (file != null) try { File.WriteAllText(file, sb.ToString(), new UTF8Encoding(false)); } catch { } }
@@ -104,18 +118,19 @@ namespace HallowGear
         {
             Func<string, string> F = n => Path.Combine(dir, n + sfx + ".png");
             var c = new Controller(true, true); var fake = (FakeSource)c.Source;
-            c.ReadNow(true, true, true);
+            c.ReadNow(true, true, true, true);
             var w = new MainWindow(c);
-            foreach (var page in MainWindow.Pages.Select(p => p[0])) { w.Show(page); Snap.Save(w, F(page), 940, 700); }
+            foreach (var page in MainWindow.Pages.Select(p => p[0])) { w.Show(page); Snap.Save(w, F(page), 940, 0); }
             // the mouse on its cable and charging, the headset low and undocked, a game running with the held alert
             fake.Devices[0].Wired = true; fake.Devices[0].Charging = true; fake.Devices[0].Battery = 71; fake.Devices[0].External = true; fake.Devices[0].Via = "USB cable + LIGHTSPEED receiver";
             fake.Devices[1].Full = false; fake.Devices[1].External = false; fake.Devices[1].Battery = 9;
             c.SnapGame("Delta Force"); c.ReadNow(true, true, false);
-            w.Show("devices"); Snap.Save(w, F("devices-game"), 940, 700);
+            w.Show("devices"); Snap.Save(w, F("devices-game"), 940, 0);
             // asleep and not connected
             fake.Reset(); fake.Devices[0].Asleep = true; fake.Devices[0].Note = "Asleep or switched off - move it to wake it."; fake.Devices[1].Connected = false; fake.Devices[1].Battery = null; fake.Devices[1].Note = "The base station isn't plugged in.";
-            c.SnapGame(null); c.ReadNow(true, true, false);
-            w.Show("devices"); Snap.Save(w, F("devices-asleep"), 940, 700);
+            c.SnapGame(null); c.SetBtHidden("bt:0a1b2c3d4e02", true); c.ReadNow(true, true, false, true);
+            w.Show("devices"); Snap.Save(w, F("devices-asleep"), 940, 0);
+            w.Show("settings"); Snap.Save(w, F("settings-hidden"), 940, 0);
             Snap.Save(CrashNotice.Make(Path.Combine(dir, "example.txt")), F("crash"), 440, 0);
         }
     }

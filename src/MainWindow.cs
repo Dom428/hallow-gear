@@ -116,8 +116,8 @@ namespace HallowGear
             top.Children.Add(new TextBlock { Text = "Your gear", FontSize = 22, FontFamily = Ui.Head, FontWeight = FontWeights.SemiBold });
             sp.Children.Add(top);
             var now = DateTime.Now;
-            string how = c.Game != null ? "A game is running (" + c.Game + "): the mouse is only listened to, never asked; the headset is read at most every 2 min. Alerts wait until you're done."
-                : "Read " + Ago(c.LastRead, now) + " \u00B7 every " + (c.IntervalSeconds / 60) + " min" + (Controller.OnBattery() ? " (on battery)" : "") + " and when gear is plugged in or out.";
+            string how = c.Game != null ? "A game is running (" + c.Game + "): the mouse is only listened to, never asked; the headset is read at most every 2 min; Bluetooth devices aren't read (only what they send by themselves is heard). Alerts wait until you're done."
+                : "Read " + Ago(c.LastRead, now) + " \u00B7 every " + (c.IntervalSeconds / 60) + " min" + (Controller.OnBattery() ? " (on battery)" : "") + " and when gear is plugged in or out" + (c.S.Bluetooth ? " \u00B7 Bluetooth devices every 5 min." : ".");
             sp.Children.Add(Ui.Muted(how, 12, 14));
             if (c.Game != null && c.Router.Held.Count > 0)
             {
@@ -127,12 +127,19 @@ namespace HallowGear
                 ((TextBlock)((StackPanel)banner.Child).Children[1]).Foreground = Ui.R("Text"); ((TextBlock)((StackPanel)banner.Child).Children[1]).TextWrapping = TextWrapping.Wrap;
                 sp.Children.Add(banner);
             }
-            if (c.Devices.Count == 0)
-                sp.Children.Add(Ui.Card(Ui.Muted(c.LastRead == null ? "Looking for your gear..." : "No Logitech gear found. Plug in the LIGHTSPEED receiver, the A50 base station or a Logitech keyboard.", 13)));
-            foreach (var d in c.Devices) { var card = Card(d, now); card.Margin = new Thickness(0, 0, 0, 12); sp.Children.Add(card); }
+            var shown = c.VisibleDevices.ToList();
+            if (shown.Count == 0)
+                sp.Children.Add(Ui.Card(Ui.Muted(c.LastRead == null ? "Looking for your gear..." : "No gear found. Plug in the LIGHTSPEED, Unifying or Bolt receiver, the A50 base station or a Logitech keyboard - or connect a Bluetooth device that reports its battery to Windows.", 13)));
+            foreach (var d in shown) { var card = Card(d, now); card.Margin = new Thickness(0, 0, 0, 12); sp.Children.Add(card); }
+            int hidden = c.Devices.Count - shown.Count;
+            if (hidden > 0) sp.Children.Add(Ui.Muted(hidden + " hidden Bluetooth device" + (hidden == 1 ? "" : "s") + " - Settings > Bluetooth devices shows " + (hidden == 1 ? "it" : "them") + " again.", 11.5, 0));
             return sp;
         }
-        static string Icon(GearDevice d) { return d.Kind == "headset" ? "headphones" : d.Kind == "keyboard" ? "keyboard" : d.Kind == "mouse" ? "computer-mouse" : "plug"; }
+        public static string KindIcon(GearDevice d)
+        {
+            switch (d.Kind) { case "headset": case "earbuds": return "headphones"; case "keyboard": return "keyboard"; case "mouse": return "computer-mouse"; case "controller": return "gamepad"; }
+            return d.Bluetooth ? "tower-broadcast" : "plug";
+        }
         string[] PillKeys(GearDevice d)
         {
             switch (d.State)
@@ -152,7 +159,7 @@ namespace HallowGear
             g.ColumnDefinitions.Add(new ColumnDefinition());
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
             var ic = new Border { Width = 44, Height = 44, CornerRadius = new CornerRadius(4), Background = Ui.R("PanelHi"), VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left,
-                Child = Icons.Make(Icon(d), 22, d.Connected && !d.Asleep ? Ui.R("AccentBrush") : Ui.R("Faint")) };
+                Child = Icons.Make(KindIcon(d), 22, d.Connected && !d.Asleep ? Ui.R("AccentBrush") : Ui.R("Faint")) };
             ((FrameworkElement)ic.Child).HorizontalAlignment = HorizontalAlignment.Center; ((FrameworkElement)ic.Child).VerticalAlignment = VerticalAlignment.Center;
             g.Children.Add(ic);
 
@@ -178,7 +185,9 @@ namespace HallowGear
                 mid.Children.Add(row);
             }
             var bits = new List<string> { d.Via };
-            if (d.HasBattery) bits.Add(d.Paused ? "paused while you play \u00B7 last read " + Ago(d.Updated, now) : "updated " + Ago(d.Updated, now));
+            if (d.Bluetooth) bits.Add(d.Connected ? "connected" : d.LastSeen.HasValue ? "last seen " + Ago(d.LastSeen, now) : "not seen yet");
+            if (d.Bluetooth && !c.AlertsOn(d)) bits.Add("alerts off");
+            if (d.HasBattery && !(d.Bluetooth && !d.Connected)) bits.Add(d.Paused ? "paused while you play \u00B7 last read " + Ago(d.Updated, now) : "updated " + Ago(d.Updated, now));
             mid.Children.Add(Ui.Muted(string.Join(" \u00B7 ", bits.Where(x => !string.IsNullOrEmpty(x))), 11.5, 2));
             if (d.Source != null) mid.Children.Add(Ui.Muted("From: " + d.Source + (d.Estimated ? " (estimated)" : ""), 11, 2));
             if (d.Note != null) { var n = Ui.Muted(d.Note, 11.5, 0); n.FontStyle = FontStyles.Italic; mid.Children.Add(n); }
@@ -247,6 +256,7 @@ namespace HallowGear
                 Ui.Muted("On battery power (a laptop) it checks every 5 minutes at most. It also checks when gear is plugged in or out.", 11.5, 6),
                 Ui.Switch("Ask the mouse during games too (every 2 min)", S.ReadMouseInGames, v => { S.ReadMouseInGames = v; c.SaveSettings(); }),
                 Ui.Muted("Off (recommended): during a game Hallow Gear sends nothing to the mouse or receiver - it only listens to the battery reports the mouse sends by itself, so it can't add input latency. The headset's base station is a separate USB device and is read at most every 2 minutes.", 11.5, 0)));
+            sp.Children.Add(BluetoothSection());
             var looks = new WrapPanel { Margin = new Thickness(0, 6, 0, 6) };
             looks.Children.Add(new TextBlock { Text = "Look", Width = 150, VerticalAlignment = VerticalAlignment.Center });
             foreach (var l in new[] { new[] { "hallow", "Follow Hallow" }, new[] { "light", "Light" }, new[] { "dark", "Dark" } })
@@ -265,6 +275,31 @@ namespace HallowGear
             btns.Children.Add(Ui.Btn("Open data folder", () => { try { System.IO.Directory.CreateDirectory(GearSettings.Dir); System.Diagnostics.Process.Start("explorer.exe", "\"" + GearSettings.Dir + "\""); } catch { } }));
             sp.Children.Add(btns);
             return sp;
+        }
+
+        // 1.1: the Bluetooth switch, and per device: shown / hidden, alerts on / off
+        FrameworkElement BluetoothSection()
+        {
+            var S = c.S; var items = new List<UIElement>();
+            items.Add(Ui.Switch("Bluetooth devices (the battery Windows knows for earbuds, headsets, controllers...)", S.Bluetooth, v => { c.SetBluetooth(v); BuildPage(); }));
+            items.Add(Ui.Muted("Read from what Windows already knows, at most every 5 minutes and never during a game. Nothing is paired, connected or changed. Charging isn't shown: Bluetooth batteries don't report it.", 11.5, 6));
+            var bt = c.Devices.Where(d => d.Bluetooth).ToList();
+            if (S.Bluetooth && bt.Count == 0) items.Add(Ui.Muted("No paired Bluetooth device has reported a battery to Windows yet.", 11.5, 0));
+            foreach (var d in bt)
+            {
+                var key = d.Key; bool hidden = S.BtHidden.Contains(key), alertsOn = !S.BtNoAlerts.Contains(key);
+                var row = new DockPanel { Margin = new Thickness(0, 4, 0, 4) };
+                var btns = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(btns, Dock.Right);
+                var show = new ToggleButton { Content = hidden ? "Hidden" : "Shown", Style = Ui.S("Chip"), IsChecked = !hidden, Margin = new Thickness(0, 0, 6, 0), ToolTip = "Show this device's card (and its battery in Hallow Overlay)" };
+                show.Click += (s, e) => { c.SetBtHidden(key, !hidden); BuildPage(); };
+                var al = new ToggleButton { Content = alertsOn ? "Alerts on" : "Alerts off", Style = Ui.S("Chip"), IsChecked = alertsOn && !hidden, IsEnabled = !hidden, ToolTip = "Low battery alerts for this device" };
+                al.Click += (s, e) => { c.SetBtAlerts(key, !alertsOn); BuildPage(); };
+                btns.Children.Add(show); btns.Children.Add(al); row.Children.Add(btns);
+                var label = Icons.WithText(KindIcon(d), d.Name + "  \u00B7  " + (d.Battery.HasValue ? d.Battery + " %" : "\u2013 %") + (d.Connected ? "" : " (not connected)"), 14, Ui.R(hidden ? "Faint" : "AccentBrush"));
+                label.VerticalAlignment = VerticalAlignment.Center; row.Children.Add(label);
+                items.Add(row);
+            }
+            return Section("Bluetooth devices", items.ToArray());
         }
 
         // ---------------- What it can read (the honest list)
@@ -290,6 +325,19 @@ namespace HallowGear
                 "Not known: whether the headset itself is switched on (the base station answers either way), and the A50 X (a different protocol) isn't supported.",
                 "Not read: chat-mix, volume, EQ, noise gate, sidetone - and nothing is ever changed." }));
             sp.Children.Add(Item("keyboard", "Wired keyboard (G713)", new[] { "Present and wired. It has no battery, so there's nothing more to read." }));
+            sp.Children.Add(Item("computer-mouse", "Other Logitech HID++ 2.0 devices", new[] {
+                "Any device on any LIGHTSPEED, Unifying or Bolt receiver slot (1-6) - a second mouse, a wireless keyboard, a headset - gets its own card, with the same reads (name, type, battery).",
+                "A Logitech device that talks HID++ on its own USB cable or straight over Bluetooth is read the same way.",
+                "Expected to work, but only the PRO X 2, A50 and G713 have been tried on real hardware." }));
+            sp.Children.Add(Item("tower-broadcast", "Bluetooth devices", new[] {
+                "Earbuds, headsets, controllers, keyboards and mice paired with Windows: the battery Windows already knows (the one Settings > Bluetooth shows), or the standard Battery Service of a Bluetooth LE device.",
+                "Only devices that are already paired. A live read only while a device is connected; otherwise Windows' last value - so nothing is ever connected or paired, and no prompt can appear.",
+                "Battery notifications a device sends by itself are heard; Hallow Gear never writes anything to the device (not even the notification switch).",
+                "Charging isn't shown: Bluetooth batteries don't report it. Each device can be hidden or have its alerts switched off in Settings." }));
+            sp.Children.Add(Item("circle-question", "Not supported", new[] {
+                "Other brands' 2.4 GHz dongles (Razer, SteelSeries, Corsair...) - each has its own protocol.",
+                "ASTRO A50 Gen 4 and A50 X - different USB ids and protocols.",
+                "Firmware updates are left to G HUB on purpose: Hallow Gear never writes to a device." }));
             sp.Children.Add(Item("shield-halved", "Never", new[] {
                 "No DPI, lighting, onboard profiles, pairing, host switching, receiver settings, sound settings or firmware - the code refuses them before a byte is built.",
                 "Nothing is sent anywhere: history stays in %APPDATA%\\HallowGear (24 hours). Only the update check talks to GitHub.",
