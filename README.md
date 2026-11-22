@@ -124,7 +124,7 @@ G HUB's local websocket (undocumented) - it doesn't need to.
   battery alerts, Settings), `invoke <id>`, `quit`. `HallowGear.exe --cmd "<line>"` for scripts.
 - `%APPDATA%\HallowGear\status.json` (written atomically):
   ```json
-  { "app":"Gear","version":"1.2","updated":"...","running":true,
+  { "app":"Gear","version":"1.2.1","updated":"...","running":true,
     "devices":[{"kind":"mouse","name":"PRO X 2","battery":66,"state":"on-battery","wired":false,"charging":false,"full":false,
                 "connected":true,"asleep":false,"estimated":false,"paused":false,"updated":"2026-11-22T09:38:55",
                 "bluetooth":false,"lastSeen":null,"alerts":true}],

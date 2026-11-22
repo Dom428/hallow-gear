@@ -108,6 +108,8 @@ namespace HallowGear.Tests
             var lnk2 = Path.Combine(dir, "elsewhere.lnk"); make(lnk2, other);
             Ok(Toasts.EnsureShortcutId(exe, lnk2) == "shortcut points elsewhere" && ShellLink.GetAumid(lnk2) == null, "a shortcut to another exe isn't touched");
             Ok(Toasts.EnsureShortcutId(exe, Path.Combine(dir, "none.lnk")) == "no shortcut", "no shortcut: nothing created");
+            Ok(Toasts.NotYetKnown(new System.Runtime.InteropServices.COMException("Element not found.", unchecked((int)0x80070490))) && Toasts.NotYetKnown(new System.Reflection.TargetInvocationException(new System.Runtime.InteropServices.COMException("x", unchecked((int)0x80070490)))) && !Toasts.NotYetKnown(new System.Runtime.InteropServices.COMException("x", unchecked((int)0x80004005))),
+               "1.2.1: Windows not knowing the ID yet (0x80070490, before the first toast) counts as on; other errors don't");
             Ok(Toasts.State(Path.Combine(dir, "none.lnk")) == ToastState.Unavailable && Toasts.State(lnk2) == ToastState.Unavailable, "no shortcut / no ID -> toasts unavailable (fallback)");
             Ok((File.Exists(real) ? File.GetLastWriteTimeUtc(real) : DateTime.MinValue) == realTime, "the real Start menu shortcut wasn't touched by the tests");
         }

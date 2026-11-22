@@ -37,6 +37,10 @@ GOOD TO KNOW
 - Not supported: other brands' 2.4 GHz dongles (Razer, SteelSeries, Corsair...), the A50 Gen 4
   and the A50 X.
 
+WHAT'S NEW IN 1.2.1
+- Device-icon notifications now work from the first one: before Gear had shown any, Windows
+  didn't know it yet, so 1.2 used the tray balloon instead.
+
 WHAT'S NEW IN 1.2
 - Notifications show the device's icon: mouse, headset, keyboard, earbuds, controller - red
   with a low-battery mark when it's low, green with a bolt when it's charging or full. They're

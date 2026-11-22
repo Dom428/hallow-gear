@@ -127,13 +127,16 @@ namespace HallowGear
                 if (!Windows10OrLater()) return ToastState.Unavailable;
                 var lnk = shortcut ?? StartMenuShortcut;
                 if (!File.Exists(lnk) || ShellLink.GetAumid(lnk) != Aumid) return ToastState.Unavailable;
-                var s = WinToast.Setting(Aumid);
+                // 1.2.1: until Gear has shown its first toast, Windows has no settings entry for the ID and asking throws "element not found"
+                // (0x80070490) - the shortcut with the ID is what toasts need, so that counts as on
+                string s; try { s = WinToast.Setting(Aumid); } catch (Exception e) { if (NotYetKnown(e)) return ToastState.On; throw; }
                 if (s == "Enabled") return ToastState.On;
                 if (s == "DisabledForApplication" || s == "DisabledForUser" || s == "DisabledByGroupPolicy") return ToastState.Off;
                 return ToastState.Unavailable;
             }
             catch { return ToastState.Unavailable; }
         }
+        public static bool NotYetKnown(Exception e) { return e != null && (e.HResult == unchecked((int)0x80070490) || NotYetKnown(e.InnerException)); }
         // at start: put the ID on Gear's own Start menu shortcut (only if it points at this exe and doesn't have it yet)
         public static string EnsureShortcutId(string exe, string shortcut = null)
         {

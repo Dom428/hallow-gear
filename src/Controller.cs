@@ -92,6 +92,7 @@ namespace HallowGear
             bool btDue = S.Bluetooth && Game == null && (now - lastBt).TotalSeconds >= BtSeconds;
             if (mouseDue || headDue || btDue || wantRescan || wantAll) kick.Set();
             if (Hist.Dirty && (now - historySaved).TotalMinutes >= 5) { historySaved = now; Hist.Save(); }
+            if (tray != null && (now - toastChecked).TotalMinutes >= 5) ThreadPool.QueueUserWorkItem(_ => { var was = toastState; ToastNow(); if (was != toastState) ui.BeginInvoke(new Action(() => WriteStatus())); });   // 1.2.1: status.json's "toasts" stays current
         }
         void Worker()
         {
