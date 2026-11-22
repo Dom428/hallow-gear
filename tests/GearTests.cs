@@ -482,6 +482,11 @@ namespace HallowGear.Tests
             var both = GearMerge.WithBluetooth(logi, new[] { new GearDevice { Key = "bt:a5", Kind = "mouse", Name = "MX Master 3S", Bluetooth = true, Via = "Bluetooth", Battery = 85 }, d });
             Ok(both.Count == 2 && both[0].Name == "MX Master 3S" && !both[0].Bluetooth && both[1].Bluetooth, "a Logitech mouse on Bluetooth is read over HID++ and not shown twice; Bluetooth cards come after Logitech gear");
             Ok(Controller.DeviceJson(d, false).ContainsKey("lastSeen") && (bool)Controller.DeviceJson(d)["bluetooth"] && !(bool)Controller.DeviceJson(d, false)["alerts"], "status.json device: 1.0 fields plus bluetooth / lastSeen / alerts");
+            // 1.2.2: opaque Bluetooth ids (never the address)
+            var oid = Controller.OpaqueId("salt1", "bt:a4c1389f2e7b");
+            Ok(System.Text.RegularExpressions.Regex.IsMatch(oid, "^bt-[0-9a-f]{12}$") && !oid.Contains("a4c1389f2e7b") && !oid.Contains("a4c138"), "opaque id: bt- and 12 hex digits, no part of the address: " + oid);
+            Ok(oid == Controller.OpaqueId("salt1", "bt:a4c1389f2e7b") && oid != Controller.OpaqueId("salt2", "bt:a4c1389f2e7b") && oid != Controller.OpaqueId("salt1", "bt:a4c1389f2e7c"), "opaque id: the same for the same device and salt, different per install and per device");
+            Ok(Controller.DeviceJson(d, true, "bt-0123456789ab")["id"] as string == "bt-0123456789ab" && Controller.DeviceJson(d).ContainsKey("id"), "status.json device: 1.2.2 adds id");
             var fb = new FakeBtSource(); var entries = fb.Read();
             Ok(entries.Count == 4 && entries.Count(e => BtProto.ToDevice(e, null, now) != null) == 3 && entries[1].Kind == "controller" && entries[0].Kind == "earbuds", "made-up Bluetooth devices: earbuds, a controller, headphones (not connected), a TV without battery");
         }
@@ -531,6 +536,12 @@ namespace HallowGear.Tests
             psi.EnvironmentVariables["HALLOW_GEAR_TESTDIR"] = Dir;
             using (var p = Process.Start(psi)) { var o = p.StandardOutput.ReadToEnd().Trim(); if (!p.WaitForExit(15000)) p.Kill(); return o; }
         }
+        static int CmdExit(string exe, string line)
+        {
+            var psi = new ProcessStartInfo(exe, "--cmd \"" + line + "\"") { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
+            psi.EnvironmentVariables["HALLOW_GEAR_TESTDIR"] = Dir;
+            using (var p = Process.Start(psi)) { p.StandardOutput.ReadToEnd(); if (!p.WaitForExit(15000)) { p.Kill(); return -1; } return p.ExitCode; }
+        }
         static Dictionary<string, object> J(string reply) { return reply.StartsWith("ok {") ? new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(reply.Substring(3)) : null; }
         static void Pipe()
         {
@@ -560,6 +571,13 @@ namespace HallowGear.Tests
                 Ok(Cmd(exe, "invoke refresh") == "ok" && Cmd(exe, "invoke nope").StartsWith("error") && Cmd(exe, "open settings") == "ok" && Cmd(exe, "open nowhere").StartsWith("error"), "invoke / open");
                 Ok(Cmd(exe, "frobnicate") == "error unknown command", "unknown command");
                 Ok(Cmd(exe, "test-autostart on") == "ok True" && Cmd(exe, "test-autostart off") == "ok False", "start with Windows on / off (test file, not the real Run key)");
+                // 1.2.2: the pipe's "refresh" - starts a read, then at most once every 30 s
+                Thread.Sleep(800); var reads0 = (int)J(Cmd(exe, "test-asks"))["reads"];
+                var rf1 = J(Cmd(exe, "refresh")); Thread.Sleep(800); var reads1 = (int)J(Cmd(exe, "test-asks"))["reads"];
+                Ok(rf1 != null && (bool)rf1["refreshing"] && rf1["reason"] == null && (int)rf1["gapSeconds"] == 30 && rf1.ContainsKey("lastRead") && reads1 > reads0, "pipe refresh: ok, a read is started (" + reads0 + " -> " + reads1 + ")");
+                var rf2 = J(Cmd(exe, "refresh")); Thread.Sleep(500); var reads2 = (int)J(Cmd(exe, "test-asks"))["reads"];
+                Ok(rf2 != null && !(bool)rf2["refreshing"] && (string)rf2["reason"] == "too-soon" && (int)rf2["retryIn"] > 0 && (int)rf2["retryIn"] <= 30 && reads2 == reads1, "pipe refresh again at once: refused (too-soon, retry in " + (rf2 == null ? "?" : rf2["retryIn"].ToString()) + " s), nothing read");
+                var rfc = CmdExit(exe, "refresh"); Ok(rfc == 0, "--cmd refresh exits 0 (even when it's too soon)");
                 // alerts: low -> a notification; during a game nothing pops up, the alert goes to status for Overlay; after the game it's shown
                 Cmd(exe, "test-battery 0 19");
                 var notes = Cmd(exe, "test-notes"); Ok(notes.Contains("Mouse battery low: 19 %"), "19 %: a low battery notification: " + notes);
@@ -582,12 +600,23 @@ namespace HallowGear.Tests
                 Ok(names.Count == 5 && !names.Contains("Xbox Wireless Controller") && (int)st["hiddenDevices"] == 1 && !((System.Collections.ArrayList)st["low"]).Contains("Xbox Wireless Controller"), "a hidden device isn't in status.json (so not on Overlay either), nor in 'low'");
                 Cmd(exe, "test-bt-hide bt:0a1b2c3d4e02 off"); st = J(Cmd(exe, "status")); Ok(((System.Collections.ArrayList)st["devices"]).Count == 6 && (int)st["hiddenDevices"] == 0, "...and back when shown again");
                 Cmd(exe, "test-game Delta Force"); var btReads = Cmd(exe, "test-bt-reads");
+                var readsG = (int)J(Cmd(exe, "test-asks"))["reads"]; var rfg = J(Cmd(exe, "refresh")); Thread.Sleep(700);
+                Ok(rfg != null && !(bool)rfg["refreshing"] && (string)rfg["reason"] == "game" && (int)J(Cmd(exe, "test-asks"))["reads"] == readsG && Cmd(exe, "test-bt-reads") == btReads, "pipe refresh during a game: refused (game), nothing at all is read");
                 Cmd(exe, "invoke refresh"); Thread.Sleep(800); Cmd(exe, "test-read");
                 Ok(Cmd(exe, "test-bt-reads") == btReads, "during a game Bluetooth devices aren't read, even on Refresh (" + btReads + ")");
                 Cmd(exe, "test-bt-hear bt:0a1b2c3d4e02 8"); Thread.Sleep(300); st = J(Cmd(exe, "status"));
                 var pad = ((System.Collections.ArrayList)st["devices"]).Cast<Dictionary<string, object>>().FirstOrDefault(x => (string)x["name"] == "Xbox Wireless Controller");
                 var al2 = st["alert"] as Dictionary<string, object>;
                 Ok(pad != null && (int)pad["battery"] == 8 && !(bool)pad["paused"] && !Cmd(exe, "test-notes").Contains("Controller battery very low") && al2 != null && ((string)al2["text"]).StartsWith("Controller battery very low: 8 %"), "...but a battery notification it sends by itself is heard (8 %): no pop-up, the alert goes to Overlay's line");
+                // 1.2.2: alert.device is an opaque id, never the Bluetooth address (pipe and status.json)
+                var dev = al2 == null ? null : al2["device"] as string;
+                Ok(dev != null && System.Text.RegularExpressions.Regex.IsMatch(dev, "^bt-[0-9a-f]{12}$") && !dev.Contains("0a1b2c3d4e02") && pad != null && (string)pad["id"] == dev && (string)al2["deviceName"] == "Xbox Wireless Controller", "alert.device is an opaque id (" + dev + "), the same as the device's id; deviceName added");
+                // (the test copy also puts its log in status - "log" / "notifications" exist only with HALLOW_GEAR_TESTDIR, so they're left out here)
+                Func<string, string> real = s => { var o = J("ok " + s); if (o == null) return ""; o.Remove("log"); o.Remove("notifications"); return new JavaScriptSerializer().Serialize(o); };
+                Thread.Sleep(300); var stText = real(File.ReadAllText(file)); var pipeText = real(Cmd(exe, "status").Substring(3));
+                Ok(stText.Length > 0 && pipeText.Length > 0 && !stText.Contains("0a1b2c3d4e0") && !pipeText.Contains("0a1b2c3d4e0") && stText.Contains("\"device\":\"bt-"), "no Bluetooth address anywhere in status.json or the pipe's status (" + stText.Length + " chars)");
+                var mouseId = ((System.Collections.ArrayList)st["devices"]).Cast<Dictionary<string, object>>().First(x => (string)x["kind"] == "mouse")["id"] as string;
+                Ok(mouseId == "mouse:pro x superlight 2", "a Logitech device keeps its model-name id: " + mouseId);
                 Cmd(exe, "test-game off");
                 Ok(Cmd(exe, "test-notes").Contains("Controller battery very low: 8 %"), "...and is shown after the game");
                 Cmd(exe, "test-bt-switch off"); st = J(Cmd(exe, "status"));

@@ -121,11 +121,13 @@ G HUB's local websocket (undocumented) - it doesn't need to.
 ## Hallow family
 
 - Pipe `HallowFamily.Gear.<user>`: `ping`, `status`, `open [devices|settings|about]`, `menu` (each device's battery, Refresh now, Low
-  battery alerts, Settings), `invoke <id>`, `quit`. `HallowGear.exe --cmd "<line>"` for scripts.
+  battery alerts, Settings), `invoke <id>`, `quit`, and (1.2.2) `refresh`: the same read-only queries as Refresh now, at most once every 30 s and never during a
+  game; it answers `ok {"refreshing":true|false,"reason":null|"too-soon"|"game","retryIn":12,"gapSeconds":30,"lastRead":"..."}`.
+  `HallowGear.exe --cmd "<line>"` for scripts.
 - `%APPDATA%\HallowGear\status.json` (written atomically):
   ```json
-  { "app":"Gear","version":"1.2.1","updated":"...","running":true,
-    "devices":[{"kind":"mouse","name":"PRO X 2","battery":66,"state":"on-battery","wired":false,"charging":false,"full":false,
+  { "app":"Gear","version":"1.2.2","updated":"...","running":true,
+    "devices":[{"id":"mouse:pro x 2","kind":"mouse","name":"PRO X 2","battery":66,"state":"on-battery","wired":false,"charging":false,"full":false,
                 "connected":true,"asleep":false,"estimated":false,"paused":false,"updated":"2026-11-22T09:38:55",
                 "bluetooth":false,"lastSeen":null,"alerts":true}],
     "lowAt":20,"veryLowAt":10,"low":[],"game":null,"polling":"normal","held":0,"alert":null,"bluetooth":true,"hiddenDevices":0,
@@ -136,8 +138,10 @@ G HUB's local websocket (undocumented) - it doesn't need to.
   `kind` = `mouse`, `headset`, `keyboard` (or another HID++ type), and for Bluetooth devices also `earbuds`, `controller`, `other`. `state` = `charging`, `full`, `on-battery`, `wired`, `wireless`
   (connected, battery not known yet), `asleep` or `not-connected`. `battery` is null for a keyboard or while unknown. `paused` = not
   asked during a game (the value is the last one read or heard). `polling` = `normal`, `on-battery` or `game`. `alert` =
-  `{"text":"Mouse battery low: 18 %","level":"low|critical","device":"mouse:pro x 2","time":"..."}` only while a game runs and a
-  low-battery alert is being held (for Hallow Overlay). Device names are model names (nothing private).
+  `{"text":"Mouse battery low: 18 %","level":"low|critical","device":"mouse:pro x 2","time":"...","deviceName":"PRO X 2"}` only while a
+  game runs and a low-battery alert is being held (for Hallow Overlay). Device names are model names (nothing private). 1.2.2 adds
+  `id` per device and `deviceName` in `alert`; `device` / `id` is the device's **opaque id** - a Logitech device's model-name key, and for
+  a Bluetooth device `bt-` + 12 hex digits (a salted SHA-256, the same for that device on this PC) - **never a Bluetooth address**.
 - Hallow Hub's tray menu lists it (one Hallow icon), the Hallow accent, light / dark (theme.json `mode`, or Settings > Look),
   crash reports kept on this PC, updates from GitHub (checked against GitHub's SHA-256), `--tray`, and **Start when I sign in to
   Windows** (per user, no admin; off by default).
@@ -160,7 +164,7 @@ battery state machine and alert rules (once per discharge, the game hold), histo
 a test copy with made-up gear. 1.1 adds a fake receiver with a keyboard and a second mouse on other slots plus a Logitech mouse on
 Bluetooth (through the real reading code), Bluetooth battery / property / address parsing, device kinds, Bluetooth alerts, hide /
 alerts-off / the switch, a scan of the compiled code for every WinRT and SetupAPI call, and Hallow Overlay 1.22's own status reader
-run over Gear's status.json. `tests\GearTests.exe unit` / `pipe` runs one suite. No test opens a real device.
+run over Gear's status.json. 1.2.2 adds the pipe `refresh` (started, refused when too soon, refused during a game with nothing read) and opaque Bluetooth ids (no address anywhere in status.json). `tests\GearTests.exe unit` / `pipe` runs one suite. No test opens a real device.
 `HallowGear.exe --snap <folder>` renders every page off-screen with made-up gear, dark and light. `HallowGear.exe --probe <log>` is
 a one-shot read-only probe of the real gear and the paired Bluetooth devices (names and battery; nothing kept listening; it refuses
 while a game runs).

@@ -37,6 +37,12 @@ GOOD TO KNOW
 - Not supported: other brands' 2.4 GHz dongles (Razer, SteelSeries, Corsair...), the A50 Gen 4
   and the A50 X.
 
+WHAT'S NEW IN 1.2.2
+- Hallow Remote and Hallow Hub can ask Hallow Gear to check the batteries now (at most once
+  every 30 seconds, and never during a game).
+- The battery alert Hallow Overlay reads names a Bluetooth device by an id that can't be turned
+  back into its Bluetooth address.
+
 WHAT'S NEW IN 1.2.1
 - Device-icon notifications now work from the first one: before Gear had shown any, Windows
   didn't know it yet, so 1.2 used the tray balloon instead.

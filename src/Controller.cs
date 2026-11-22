@@ -128,6 +128,38 @@ namespace HallowGear
         }
         public void Forget(string key) { S.KnownGear.Remove(key); Devices.RemoveAll(x => x.Key == key && !x.Connected); S.Save(); WriteStatus(); Fire(); }
         public void RefreshNow() { wantAll = true; wantRescan = true; kick.Set(); }
+        // 1.2.2: the pipe's "refresh" (Hallow Remote / Hub): the same read-only queries as Refresh now, at most once every 30 s,
+        // and never during a game (then nothing is asked at all - not even the headset). The reply says whether a read was started.
+        public const int RefreshGapSeconds = 30;
+        DateTime lastPipeRefresh = DateTime.MinValue; readonly object refreshLock = new object();
+        public Dictionary<string, object> PipeRefresh(DateTime now)
+        {
+            lock (refreshLock)
+            {
+                string reason = null; int retry = 0;
+                if (Game != null) reason = "game";
+                else if ((now - lastPipeRefresh).TotalSeconds < RefreshGapSeconds) { reason = "too-soon"; retry = (int)Math.Ceiling(RefreshGapSeconds - (now - lastPipeRefresh).TotalSeconds); }
+                if (reason == null) { lastPipeRefresh = now; Log("refresh (pipe)"); RefreshNow(); }
+                return new Dictionary<string, object> { { "refreshing", reason == null }, { "reason", reason }, { "retryIn", retry }, { "gapSeconds", RefreshGapSeconds },
+                    { "lastRead", LastRead.HasValue ? Family.Time(LastRead.Value) : null } };
+            }
+        }
+        // 1.2.2: what status.json calls a device - never a Bluetooth address. Bluetooth keys ("bt:<address>") become "bt-" + 12 hex digits
+        // of SHA-256(this install's random salt + key): the same device keeps its id, but the id can't be turned back into the address.
+        public string PublicId(string key)
+        {
+            if (key == null || !key.StartsWith("bt:")) return key;
+            if (string.IsNullOrEmpty(S.IdSalt)) lock (refreshLock) if (string.IsNullOrEmpty(S.IdSalt)) { S.IdSalt = Guid.NewGuid().ToString("N"); S.Save(); }
+            return OpaqueId(S.IdSalt, key);
+        }
+        public static string OpaqueId(string salt, string key)
+        {
+            using (var h = System.Security.Cryptography.SHA256.Create())
+            {
+                var b = h.ComputeHash(System.Text.Encoding.UTF8.GetBytes(salt + "|" + key));
+                return "bt-" + string.Concat(b.Take(6).Select(x => x.ToString("x2")));
+            }
+        }
         void DeviceChanged() { Log("devices changed"); wantRescan = true; var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) }; t.Tick += (s, e) => { t.Stop(); if (Game == null) { lastMouseAsk = DateTime.MinValue; lastHeadsetAsk = DateTime.MinValue; } kick.Set(); }; t.Start(); }
 
         void Apply(List<GearDevice> list, List<BtEntry> bt, DateTime now)
@@ -444,9 +476,10 @@ namespace HallowGear
 
         // ---------------- family link: status.json and the pipe
         // 1.0 fields unchanged (Hallow Overlay 1.20+ reads them); 1.1 adds "bluetooth", "lastSeen", "alerts" and the kinds earbuds / controller / other
-        public static Dictionary<string, object> DeviceJson(GearDevice d, bool alerts = true)
+        // 1.2.2 adds "id" (opaque for Bluetooth devices, see PublicId; null when the caller didn't give one)
+        public static Dictionary<string, object> DeviceJson(GearDevice d, bool alerts = true, string id = null)
         {
-            return new Dictionary<string, object> {
+            return new Dictionary<string, object> { { "id", id },
                 { "kind", d.Kind }, { "name", d.Name }, { "battery", d.HasBattery ? (object)d.Battery : null }, { "state", d.State }, { "wired", d.Wired },
                 { "charging", d.Charging }, { "full", d.Full }, { "connected", d.Connected }, { "asleep", d.Asleep }, { "estimated", d.Estimated },
                 { "paused", d.Paused }, { "updated", d.Updated.HasValue ? Family.Time(d.Updated.Value) : null },
@@ -456,13 +489,14 @@ namespace HallowGear
         {
             var d = new Dictionary<string, object> { { "app", "Gear" }, { "version", Program.Version }, { "updated", Family.Time(DateTime.Now) }, { "running", running } };
             var visible = VisibleDevices.ToList();   // hidden Bluetooth devices aren't listed (so Overlay doesn't show them either)
-            d["devices"] = visible.Select(x => (object)DeviceJson(x, AlertsOn(x))).ToList();
+            d["devices"] = visible.Select(x => (object)DeviceJson(x, AlertsOn(x), PublicId(x.Key))).ToList();
             d["lowAt"] = S.Low1; d["veryLowAt"] = S.Low2;
             d["bluetooth"] = S.Bluetooth; d["hiddenDevices"] = Devices.Count - visible.Count;
             d["low"] = visible.Where(x => x.HasBattery && x.Battery.HasValue && !x.Charging && !x.Full && x.Connected && x.Battery <= S.Low1).Select(x => x.Name).ToList();
             d["game"] = Game; d["polling"] = Polling; d["held"] = Router.Held.Count;
             var line = Game != null ? Router.OverlayLine : null;
-            d["alert"] = line == null ? null : new Dictionary<string, object> { { "text", line.Title }, { "level", line.Kind }, { "device", line.Key }, { "time", Family.Time(line.At) } };
+            d["alert"] = line == null ? null : new Dictionary<string, object> { { "text", line.Title }, { "level", line.Kind }, { "device", PublicId(line.Key) }, { "time", Family.Time(line.At) },
+                { "deviceName", DeviceName(line.Key) } };   // 1.2.2: "device" is the device's opaque id (never a Bluetooth address); deviceName added
             d["lastRead"] = LastRead.HasValue ? Family.Time(LastRead.Value) : null;
             d["startsWithWindows"] = StartsWithWindows(); d["look"] = Program.Light ? "light" : "dark";
             d["toasts"] = ToastWord;   // 1.2: "on" (Windows toasts with the device icon), "fallback" (tray balloon / Hub), "off" (switched off in Windows)
@@ -470,6 +504,7 @@ namespace HallowGear
             if (GearSettings.TestDir != null) { lock (log) d["log"] = log.ToArray(); d["notifications"] = Notifications; }
             return d;
         }
+        string DeviceName(string key) { var x = Devices.FirstOrDefault(z => z.Key == key); return x != null ? x.Name : null; }
         public void WriteStatus(bool running = true) { if (!SnapMode) Family.WriteStatus(Family.Json(StatusData(running))); }
         string Command(string line)
         {
@@ -479,6 +514,7 @@ namespace HallowGear
                 case "ping": return "ok " + Family.Json(new Dictionary<string, object> { { "app", "Gear" }, { "version", Program.Version } });
                 case "status": { var d = OnUiValue(() => StatusData(true)); if (d == null) return "error no answer in time"; return "ok " + Family.Json(d); }
                 case "open": return OnUi(() => { var p = arg.Length > 0 ? MainWindow.PageId(arg) : null; if (arg.Length > 0 && p == null) return "error no page called " + arg; ShowMain(p); return "ok"; });
+                case "refresh": return "ok " + Family.Json(PipeRefresh(DateTime.Now));   // 1.2.2
                 case "menu": return OnUi(() => "ok " + Family.Json(new Dictionary<string, object> { { "app", "Gear" }, { "items", MenuItems() } }));
                 case "invoke": return OnUi(() => Invoke(arg));
                 case "quit": new Thread(() => { Thread.Sleep(300); ui.BeginInvoke(new Action(Quit)); }) { IsBackground = true }.Start(); return "ok";

@@ -20,14 +20,14 @@ using WF = System.Windows.Forms;
 [assembly: AssemblyTitle("Hallow Gear")]
 [assembly: AssemblyProduct("Hallow Gear")]
 [assembly: AssemblyDescription("Battery and charging of your Logitech gear and Bluetooth devices")]
-[assembly: AssemblyVersion("1.2.1.0")]
-[assembly: AssemblyFileVersion("1.2.1.0")]
+[assembly: AssemblyVersion("1.2.2.0")]
+[assembly: AssemblyFileVersion("1.2.2.0")]
 
 namespace HallowGear
 {
     public static class Program
     {
-        public const string Version = "1.2.1";
+        public const string Version = "1.2.2";
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
 
         [STAThread]

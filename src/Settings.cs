@@ -46,6 +46,7 @@ namespace HallowGear
         [DataMember] public string LastUpdateCheck;
         [DataMember] public string LastCrashShown;
         [DataMember] public bool TrayHintShown;
+        [DataMember] public string IdSalt;                  // 1.2.2: random, per install - makes status.json's opaque Bluetooth device ids (never the address)
 
         [OnDeserializing] void Defaults(StreamingContext c) { UseHallowIcon = true; UseHallowAccent = true; Look = "hallow"; AlertLow = true; Low1 = 20; Low2 = 10; AlertCharging = true; AlertFull = true; PollSeconds = 60; Bluetooth = true; }
 
