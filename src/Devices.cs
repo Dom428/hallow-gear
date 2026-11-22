@@ -199,9 +199,7 @@ namespace HallowGear
                     if (err == 8 && known == null) { h.Slots.Remove(n); continue; }   // an empty slot
                     var name = sl.Name ?? known; if (name == null) { if (err != 8) L("slot " + n + ": no answer (" + Hidpp.ErrorName(err) + ")"); h.Slots.Remove(n); continue; }
                     var kind = sl.Type.HasValue ? Hidpp.TypeName(sl.Type.Value) : "mouse";
-                    var d = sl.Last != null ? sl.Last.Clone() : new GearDevice { Key = GearMerge.KeyFor(kind, name), Kind = kind, Name = name, Via = "LIGHTSPEED receiver" };
-                    d.Asleep = err == 9 || err == -1; d.Connected = err != 8; d.Charging = false; d.Full = false;
-                    d.Note = d.Asleep ? "Asleep or switched off - move it to wake it." : "Paired to the receiver but not reachable.";
+                    var d = Offline(sl.Last, kind, name);
                     sl.Last = d; L("slot " + n + ": '" + name + "' " + Hidpp.ErrorName(err));
                     yield return d;
                 }
@@ -267,6 +265,15 @@ namespace HallowGear
                 L("A50 battery: " + (b == null ? "no answer" : b.ToString()));
             }
             h.A50Last = d;
+            return d;
+        }
+        // a paired device that doesn't answer (the receiver says 0x08 or 0x09, or nothing comes back): asleep or switched off - never "not
+        // connected" (that's for gear whose receiver / cable isn't there). It keeps its last battery reading.
+        public static GearDevice Offline(GearDevice last, string kind, string name)
+        {
+            var d = last != null ? last.Clone() : new GearDevice { Key = GearMerge.KeyFor(kind, name), Kind = kind, Name = name, Via = "LIGHTSPEED receiver" };
+            d.Asleep = true; d.Connected = true; d.Charging = false; d.Full = false; d.Paused = false;
+            d.Note = "Asleep or switched off - move it to wake it.";
             return d;
         }
         public List<string> SentSummary() { return SentLog.Summary(); }

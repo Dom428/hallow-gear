@@ -33,6 +33,10 @@ GOOD TO KNOW
   Settings > System > Notifications.
 - Nothing is sent anywhere. History (24 hours) and crash reports stay on this PC.
 
+WHAT'S NEW IN 1.0.1
+- A mouse that has gone to sleep now shows as "Asleep" (with its last battery reading), not
+  "Not connected".
+
 WHAT'S NEW IN 1.0
 - The first version: your mouse, headset and keyboard's battery and charging, alerts that wait
   for your game to end, a 24-hour history, and the family link.

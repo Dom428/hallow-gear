@@ -212,6 +212,9 @@ namespace HallowGear.Tests
             var asleepCable = cable.Clone(); asleepCable.Battery = null; asleepCable.Charging = false; asleepCable.Updated = null;
             m = GearMerge.Merge(new[] { rx, asleepCable }); Ok(m.Count == 1 && m[0].Wired && m[0].Battery == 66, "cable without a battery answer keeps the receiver's reading");
             Ok(GearMerge.KeyFor("mouse", " PRO X 2 ") == "mouse:pro x 2", "keys ignore case and spaces");
+            var off = LogiSource.Offline(rx, "mouse", "PRO X 2");
+            Ok(off.State == "asleep" && off.Connected && off.Battery == 66 && off.StateLabel == "Asleep" && rx.State == "on-battery", "1.0.1: a paired mouse the receiver can't reach (0x08 / 0x09) is asleep, not \"not connected\", and keeps its last battery");
+            Ok(LogiSource.Offline(null, "mouse", "M").State == "asleep", "...also before it was ever read");
         }
         static void States()
         {
