@@ -12,7 +12,7 @@ using System.Web.Script.Serialization;
 
 namespace HallowGear.Tests
 {
-    public static class Run
+    public static partial class Run
     {
         static int pass, fail;
         static void Ok(bool c, string name) { if (c) { pass++; Console.WriteLine("ok   " + name); } else { fail++; Console.WriteLine("FAIL " + name); } }
@@ -31,6 +31,8 @@ namespace HallowGear.Tests
                 try { Building(); Parsing(); AllowList(); NoOtherWrites(); FakeMouse(); A50(); Merge(); States(); Alerts(); GameHold(); HistoryTests(); LookTests(); SettingsTests(); }
                 catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
                 try { MoreLogitech(); BtParsing(); BtKinds(); BtCards(); BtAlerts(); }
+                catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
+                try { IconTests(); ToastXmlTests(); ShortcutTests(); RouteTests(); }   // 1.2 (NotifyTests.cs)
                 catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
             }
             if (pipe) { try { Pipe(); } catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); } }
@@ -134,6 +136,7 @@ namespace HallowGear.Tests
             Ok(wf != null, "found the WriteFile import");
             var callers = new HashSet<string>(); var setters = new List<string>();
             // 1.1: every WinRT (Windows.*) method the code can call or hook, and every SetupAPI / CfgMgr / Bluetooth API it imports
+            var toastCalls = new SortedSet<string>(); var badToast = new SortedSet<string>();
             var winrt = new SortedSet<string>(); var badWinrt = new SortedSet<string>(); var imports = new SortedSet<string>(); var badImports = new SortedSet<string>();
             var okWinrt = new HashSet<string> { "FindAllAsync", "GetDeviceSelectorFromPairingState", "FromIdAsync", "GetGattServicesForUuidAsync", "GetCharacteristicsForUuidAsync",
                 "ReadValueAsync", "FromBuffer", "ReadBytes", "GetResults", "Cancel", "Close", "Dispose", "add_ValueChanged", "remove_ValueChanged" };
@@ -164,7 +167,13 @@ namespace HallowGear.Tests
                         try { target = type.Module.ResolveMethod(BitConverter.ToInt32(il, at), type.IsGenericType ? type.GetGenericArguments() : null, m.IsGenericMethod ? m.GetGenericArguments() : null); } catch { continue; }
                         if (target == wf) callers.Add(type.Name + "." + m.Name);
                         var ns = target.DeclaringType == null ? "" : target.DeclaringType.Namespace ?? "";
-                        if (ns == "Windows" || ns.StartsWith("Windows."))
+                        if (ns.StartsWith("Windows.UI.Notifications") || ns.StartsWith("Windows.Data.Xml"))
+                        {   // 1.2: toasts - only the WinToast class (and its click handler) may touch them
+                            var owner = type; while (owner.DeclaringType != null) owner = owner.DeclaringType;
+                            toastCalls.Add(target.DeclaringType.Name.Split('`')[0] + "." + target.Name);
+                            if (owner.Name != "WinToast") badToast.Add(target.DeclaringType.Name + "." + target.Name + " (in " + type.Name + "." + m.Name + ")");
+                        }
+                        else if (ns == "Windows" || ns.StartsWith("Windows."))
                         {
                             var nm = target.DeclaringType.Name.Split('`')[0] + "." + target.Name; winrt.Add(nm);
                             bool ok = okWinrt.Contains(target.Name) || target.Name.StartsWith("get_") || (target.Name == ".ctor" && target.DeclaringType.Name.StartsWith("TypedEventHandler"));
@@ -178,6 +187,8 @@ namespace HallowGear.Tests
                 "the IL scan sees the Bluetooth code (" + winrt.Count + " WinRT members, e.g. GattCharacteristic.ReadValueAsync, add_ValueChanged)");
             Ok(badWinrt.Count == 0, "Bluetooth: every WinRT call is a read (find, open by id, get services / characteristics, read value, listen) - no write, pair, connect, CCCD, session or advertising call" + (badWinrt.Count > 0 ? ": " + string.Join(", ", badWinrt) : ""));
             Ok(!winrt.Any(x => x.Contains(".Write") || x.EndsWith("PairAsync") || x.Contains("Unpair") || x.Contains("MaintainConnection") || x.Contains("OpenAsync") || x.Contains("ClientCharacteristicConfiguration")), "no WriteValue / WriteClientCharacteristicConfigurationDescriptor / Pair / MaintainConnection / OpenAsync anywhere");
+            Ok(badToast.Count == 0 && toastCalls.Contains("ToastNotificationManager.CreateToastNotifier") && toastCalls.Contains("ToastNotifier.Show"), "1.2: toast calls (" + string.Join(", ", toastCalls) + ") only in WinToast" + (badToast.Count > 0 ? ": " + string.Join(", ", badToast) : ""));
+            Ok(!toastCalls.Any(x => x.Contains("History") || x.EndsWith(".Hide") || x.Contains("Schedule")), "1.2: toasts are only created and shown - never removed, scheduled or read back from history");
             Ok(badImports.Count == 0 && imports.Contains("setupapi.dll!SetupDiGetDevicePropertyW"), "Bluetooth device properties: only SetupDi Get / Enum imports - no SetupDiSet* / CM_Set* / Bluetooth* API (" + imports.Count(x => x.StartsWith("setupapi")) + " SetupAPI imports)" + (badImports.Count > 0 ? ": " + string.Join(", ", badImports) : ""));
         }
 
@@ -448,7 +459,7 @@ namespace HallowGear.Tests
             Ok(BtProto.KindFromAppearance(0x0941, "x") == "earbuds" && BtProto.KindFromAppearance(0x0942, "x") == "headset" && BtProto.KindFromAppearance(0x0943, "x") == "headset", "LE appearance: earbud, headset, headphones");
             Ok(BtProto.KindFromAppearance(0, "Xbox Wireless Controller") == "controller" && BtProto.KindFromAppearance(0, "DualSense Wireless Controller") == "controller" && BtProto.KindFromAppearance(0x0040, "Pixel 8") == "other", "no appearance: the name decides (Xbox / DualSense = controller), a phone = other");
             Ok(BatteryAlerts.Word(new GearDevice { Kind = "earbuds" }) == "Earbuds" && BatteryAlerts.Word(new GearDevice { Kind = "controller" }) == "Controller" && BatteryAlerts.Word(new GearDevice { Kind = "other" }) == "Device", "kind words: Earbuds, Controller, Device");
-            Ok(MainWindow.KindIcon(new GearDevice { Kind = "controller" }) == "gamepad" && MainWindow.KindIcon(new GearDevice { Kind = "earbuds" }) == "headphones" && Icons.Get(MainWindow.KindIcon(new GearDevice { Kind = "other", Bluetooth = true })) != null, "card icons: gamepad, headphones, and an icon for other Bluetooth devices");
+            Ok(MainWindow.KindIcon(new GearDevice { Kind = "controller" }) == "gamepad" && MainWindow.KindIcon(new GearDevice { Kind = "earbuds" }) == "earbuds" && Icons.Get("earbuds") != null && MainWindow.KindIcon(new GearDevice { Kind = "headset" }) == "headphones" && Icons.Get(MainWindow.KindIcon(new GearDevice { Kind = "other", Bluetooth = true })) != null, "card icons: gamepad, earbuds (1.2: their own glyph), headphones, and an icon for other Bluetooth devices");
         }
         static void BtCards()
         {

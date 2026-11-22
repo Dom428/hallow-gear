@@ -7,7 +7,8 @@ headset, a Logitech keyboard, and (new in 1.1) Bluetooth earbuds, headsets and c
 full, on battery, wired or wireless, asleep or not connected, when it was last read or seen, and a 24-hour sparkline. It warns you
 when a battery gets low (once per discharge), when charging starts and when it's full - and **never pops up during a game**: alerts
 wait until you're done, and a low battery shows as a quiet line in Hallow Overlay instead. It **only reads**: it can't change a
-single setting on your gear. Light and dark mode.
+single setting on your gear. Light and dark mode. New in 1.2: its notifications show **the device's own icon** - a mouse, a headset,
+earbuds, a controller - in red when the battery is low and in green when it's charging or full.
 
 ![Your gear (made-up data)](docs/devices.png)
 
@@ -98,10 +99,22 @@ G HUB's local websocket (undocumented) - it doesn't need to.
 - **Low battery** at 20 % and **very low** at 10 % (both configurable), once per discharge each (charging re-arms them; for a
   Bluetooth device, which doesn't report charging, the battery climbing 10 points re-arms them). The same rules for every device.
 - **Charging started** and **fully charged**; **switched to wired / wireless** (off by default).
-- They're Windows notifications - from Hallow Hub's icon when Hub shows the one Hallow icon, otherwise from Hallow Gear's own.
+- **With the device's icon (1.2).** Real Windows notifications with the icon of the device they're about: mouse, headset, keyboard,
+  earbuds, controller or other - **red** with a low-battery mark when it's low or very low, **green** with a bolt when it's charging or
+  full, neutral with a plug or a signal for wired / wireless. The device cards use the same icons. Clicking a notification opens
+  Hallow Gear on that device. For this Gear gives its own Start menu shortcut an AppUserModelID (`Hallow.Gear`, per user, no admin -
+  only Gear's own shortcut, and only when it points at Gear). The icons are drawn by Gear (Font Awesome Free glyphs; the earbuds are
+  Hallow's own) into `%LOCALAPPDATA%\HallowGear\icons` - Windows needs a file to show.
+- Without that (no Start menu shortcut yet, an older Windows) it falls back to a tray balloon with the device icon as its large icon -
+  from Gear's own tray icon, or Hallow Hub's when Hub shows the one Hallow icon. Each alert is shown once, one way. If you switch
+  Hallow Gear's notifications off in Windows Settings, nothing is shown.
 - **During a game nothing pops up.** Alerts are held and shown when the game closes (at most three; more become one summary). A low
   battery goes to **Hallow Overlay** as a small line in its in-game panel (Overlay 1.20+ reads it from Gear's status.json; an older
   Overlay gets a short `flash`).
+
+![Notifications with the device icon (made-up data, rendered off-screen)](docs/notifications.png)
+
+![Every device icon and state, dark and light](docs/device-icons.png)
 
 ![While you play: the mouse charging on its cable, the headset at 9 % (made-up data)](docs/devices-game.png)
 
@@ -111,7 +124,7 @@ G HUB's local websocket (undocumented) - it doesn't need to.
   battery alerts, Settings), `invoke <id>`, `quit`. `HallowGear.exe --cmd "<line>"` for scripts.
 - `%APPDATA%\HallowGear\status.json` (written atomically):
   ```json
-  { "app":"Gear","version":"1.1","updated":"...","running":true,
+  { "app":"Gear","version":"1.2","updated":"...","running":true,
     "devices":[{"kind":"mouse","name":"PRO X 2","battery":66,"state":"on-battery","wired":false,"charging":false,"full":false,
                 "connected":true,"asleep":false,"estimated":false,"paused":false,"updated":"2026-11-22T09:38:55",
                 "bluetooth":false,"lastSeen":null,"alerts":true}],
@@ -158,4 +171,5 @@ while a game runs).
   `hid-logitech-hidpp` (the voltage-to-percent table comes from there).
 - ASTRO A50 Gen 5 battery query: [HeadsetControl](https://github.com/Sapd/HeadsetControl) (reverse-engineered there).
 - Icons: Font Awesome Free 7.3.1 by Fonticons, Inc. (https://fontawesome.com), licensed CC BY 4.0 - see FontAwesome-LICENSE.txt.
+  The device icons for notifications (1.2) are drawn from those glyphs; the earbuds glyph is Hallow's own.
 - Not affiliated with Logitech. Logitech, LIGHTSPEED, G HUB and ASTRO are trademarks of Logitech.

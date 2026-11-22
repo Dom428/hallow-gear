@@ -130,15 +130,33 @@ namespace HallowGear
             var shown = c.VisibleDevices.ToList();
             if (shown.Count == 0)
                 sp.Children.Add(Ui.Card(Ui.Muted(c.LastRead == null ? "Looking for your gear..." : "No gear found. Plug in the LIGHTSPEED, Unifying or Bolt receiver, the A50 base station or a Logitech keyboard - or connect a Bluetooth device that reports its battery to Windows.", 13)));
-            foreach (var d in shown) { var card = Card(d, now); card.Margin = new Thickness(0, 0, 0, 12); sp.Children.Add(card); }
+            foreach (var d in shown) { var card = Card(d, now); card.Margin = new Thickness(0, 0, 0, 12); card.Tag = d.Key; sp.Children.Add(card); }
             int hidden = c.Devices.Count - shown.Count;
             if (hidden > 0) sp.Children.Add(Ui.Muted(hidden + " hidden Bluetooth device" + (hidden == 1 ? "" : "s") + " - Settings > Bluetooth devices shows " + (hidden == 1 ? "it" : "them") + " again.", 11.5, 0));
             return sp;
         }
         public static string KindIcon(GearDevice d)
         {
-            switch (d.Kind) { case "headset": case "earbuds": return "headphones"; case "keyboard": return "keyboard"; case "mouse": return "computer-mouse"; case "controller": return "gamepad"; }
+            switch (d.Kind) { case "headset": return "headphones"; case "earbuds": return "earbuds"; case "keyboard": return "keyboard"; case "mouse": return "computer-mouse"; case "controller": return "gamepad"; }
             return d.Bluetooth ? "tower-broadcast" : "plug";
+        }
+        // 1.2: the same icons as the notifications (red when low, green when charging / full); faint when it isn't connected
+        FrameworkElement CardIcon(GearDevice d)
+        {
+            if (!d.Connected || d.Asleep) return Icons.Make(KindIcon(d), 22, Ui.R("Faint"));
+            var kind = DeviceIcons.Kinds.Contains(d.Kind) ? d.Kind : null;
+            if (kind == null) return Icons.Make(KindIcon(d), 22, Ui.R("AccentBrush"));
+            return DeviceIcons.Element(kind, DeviceIcons.StateOf(d, c.S.Low1, c.S.Low2), 30, Program.Light, Program.AccentHex);
+        }
+        // a toast was clicked: show that device's card
+        public void FocusDevice(string key)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var sv = content.Child as ScrollViewer; var sp = sv == null ? null : sv.Content as StackPanel; if (sp == null) return;
+                var card = sp.Children.OfType<FrameworkElement>().FirstOrDefault(x => (x.Tag as string) == key);
+                if (card != null) card.BringIntoView();
+            }), DispatcherPriority.Loaded);
         }
         string[] PillKeys(GearDevice d)
         {
@@ -159,7 +177,7 @@ namespace HallowGear
             g.ColumnDefinitions.Add(new ColumnDefinition());
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
             var ic = new Border { Width = 44, Height = 44, CornerRadius = new CornerRadius(4), Background = Ui.R("PanelHi"), VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left,
-                Child = Icons.Make(KindIcon(d), 22, d.Connected && !d.Asleep ? Ui.R("AccentBrush") : Ui.R("Faint")) };
+                Child = CardIcon(d) };
             ((FrameworkElement)ic.Child).HorizontalAlignment = HorizontalAlignment.Center; ((FrameworkElement)ic.Child).VerticalAlignment = VerticalAlignment.Center;
             g.Children.Add(ic);
 

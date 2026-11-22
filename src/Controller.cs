@@ -30,6 +30,8 @@ namespace HallowGear
         readonly AutoResetEvent kick = new AutoResetEvent(false); volatile bool wantRescan = true, wantAll; volatile bool readBusy;
         FileSystemWatcher accentWatch; DeviceWatch devWatch;
         public int Notifications;
+        // 1.2: notifications with the device icon - a Windows toast, or the tray balloon with a large icon, or Hub's notify (Toasts.cs)
+        public readonly NoteSender Sender = new NoteSender(); ToastState toastState = ToastState.Unavailable; DateTime toastChecked = DateTime.MinValue; public string ShortcutNote;
         // 1.1: Bluetooth devices (what Windows knows): read at most every 5 minutes, never during a game (notifications still arrive)
         public readonly IBtSource Bt; public const int BtSeconds = 300;
         DateTime lastBt = DateTime.MinValue, btReadAt = DateTime.MinValue; List<BtEntry> btLast = new List<BtEntry>();
@@ -64,6 +66,7 @@ namespace HallowGear
                     upd.Start();
                 }
                 ui.BeginInvoke(new Action(ShowCrashNotice), DispatcherPriority.ApplicationIdle);
+                SetupNotes();
             }
             Game = GameNow(); WriteStatus();
             Tick();
@@ -193,7 +196,7 @@ namespace HallowGear
             if (!AlertsOn(d)) { foreach (var x in a) Log("alert off for " + d.Key + ": " + x); return; }   // 1.1: hidden, or its alerts switched off
             foreach (var x in a) Log("alert: " + x);
             var show = Router.Route(a, Game != null);
-            foreach (var x in show) Notify(x.Title, x.Text);
+            foreach (var x in show) Notify(x.Title, x.Text, x);
             if (Game != null && a.Any(x => x.Low)) OverlayLine(a.Last(x => x.Low).Title);
         }
         void Heard(string key, BatteryReading b)
@@ -218,7 +221,7 @@ namespace HallowGear
             var was = Game; Game = g; Log(g != null ? "game: " + g : "game closed");
             if (g == null && was != null)
             {
-                foreach (var a in Router.GameEnded(DateTime.Now)) Notify(a.Title, a.Text);
+                foreach (var a in Router.GameEnded(DateTime.Now)) Notify(a.Title, a.Text, a);
                 lastMouseAsk = DateTime.MinValue; kick.Set();   // catch up on the mouse now
             }
             WriteStatus(); Fire();
@@ -338,20 +341,65 @@ namespace HallowGear
             catch { on = false; lists = false; }
         }
         void SetHosted(bool on, bool lists) { hubHosts = on; hubLists = on && lists; if (tray != null && !balloonOwn) tray.Visible = !hubLists; }
-        // a notification (Windows shows it as a toast): from Hallow Hub's icon when Hub hosts Gear's, otherwise from Gear's own tray icon
-        public void Notify(string title, string text)
+        // 1.2: a notification with the device's icon. One way only (NoteSender): a Windows toast when Gear's shortcut has its ID and
+        // notifications are on; otherwise the tray balloon with the icon - Gear's own, or Hallow Hub's text-only "notify" when Hub hosts Gear's icon.
+        public void Notify(string title, string text, GearAlert a = null)
         {
             Notifications++; Log("notify: " + title);
             lock (Shown) { Shown.Add(new[] { DateTime.Now.ToString("HH:mm"), title, text }); if (Shown.Count > 30) Shown.RemoveAt(0); }
             if (tray == null || GearSettings.TestDir != null || SnapMode) return;
-            if (!hubHosts) { tray.ShowBalloonTip(6000, title, text, WF.ToolTipIcon.None); return; }
+            var n = MakeNote(title, text, a, Toasts.WindowsLight());
+            ThreadPool.QueueUserWorkItem(_ => { var r = Sender.Send(n); Log("shown as: " + r.ToString().ToLowerInvariant()); });
+        }
+        // the device (from the alert's key) -> its icon files
+        public Note MakeNote(string title, string text, GearAlert a, bool light)
+        {
+            var n = new Note { Title = title, Text = text };
+            if (a == null || a.Key == "summary") return n;
+            var d = Devices.FirstOrDefault(x => x.Key == a.Key);
+            n.Key = a.Key; n.Kind = DeviceIcons.KindOf(d != null ? d.Kind : null); n.State = DeviceIcons.StateOf(a.Kind);
+            try { n.LogoFile = DeviceIcons.PngFile(n.Kind, n.State, 96, light, Program.AccentHex); n.IcoFile = DeviceIcons.IcoFile(n.Kind, n.State, light, Program.AccentHex); }
+            catch (Exception e) { Log("icon: " + Family.OneLine(e.Message)); }
+            return n;
+        }
+        public string ToastWord { get { return toastState == ToastState.On ? "on" : toastState == ToastState.Off ? "off" : "fallback"; } }
+        ToastState ToastNow()
+        {
+            if ((DateTime.Now - toastChecked).TotalSeconds >= 60) { toastChecked = DateTime.Now; var s = Toasts.State(); if (s != toastState) Log("toasts: " + s); toastState = s; }
+            return toastState;
+        }
+        void SetupNotes()
+        {
+            Sender.Toasts = ToastNow;
+            Sender.HubHosts = () => hubHosts;
+            Sender.ShowToast = n => { WinToast.Show(Toasts.Aumid, WinToast.Create(Toasts.Xml(n), Toasts.Tag(n), args => ui.BeginInvoke(new Action(() => OpenDevice(Toasts.KeyFromLaunch(args)))))); return true; };
+            Sender.SendHub = n => Family.Error(Family.Send("Hub", "notify Gear\t" + n.Title + "\t" + n.Text, 2000), "no answer") == null;
+            Sender.ShowBalloon = n => { bool ok = false; var op = ui.BeginInvoke(new Action(() => ok = Balloon(n))); op.Wait(TimeSpan.FromSeconds(5)); return ok; };
+            // Gear's own Start menu shortcut gets the AppUserModelID toasts need (per user; only Gear's shortcut, only if it points at this exe)
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                if (Family.Error(Family.Send("Hub", "notify Gear\t" + title + "\t" + text, 2000), "no answer") == null) return;
-                ui.BeginInvoke(new Action(() => { balloonOwn = true; tray.Visible = true; tray.ShowBalloonTip(6000, title, text, WF.ToolTipIcon.None); var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) }; t.Tick += (s, e) => { t.Stop(); balloonOwn = false; SetHosted(hubHosts, hubLists); }; t.Start(); }));
+                ShortcutNote = Toasts.EnsureShortcutId(Assembly.GetExecutingAssembly().Location); Log("shortcut id: " + ShortcutNote);
+                toastChecked = DateTime.MinValue; ToastNow(); ui.BeginInvoke(new Action(() => WriteStatus()));
             });
         }
-        public void ApplyAccent()
+        // Gear's own tray icon (shown for a few seconds when Hub hosts it and hides it), the device icon as the balloon's large icon
+        bool Balloon(Note n)
+        {
+            if (tray == null) return false;
+            if (hubLists)
+            {
+                balloonOwn = true; tray.Visible = true;
+                var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) }; t.Tick += (s, e) => { t.Stop(); balloonOwn = false; SetHosted(hubHosts, hubLists); }; t.Start();
+            }
+            if (!Toasts.BalloonWithIcon(tray, n.Title, n.Text, n.IcoFile)) tray.ShowBalloonTip(6000, n.Title, n.Text, WF.ToolTipIcon.None);
+            return true;
+        }
+        // clicking a toast opens Gear on that device
+        public void OpenDevice(string key)
+        {
+            ShowMain("devices");
+            if (main != null && key != null) main.FocusDevice(key);
+        }        public void ApplyAccent()
         {
             if (SnapMode) return;
             var a = Accent.Current(S.UseHallowAccent); var light = Look.Current(S);
@@ -416,6 +464,7 @@ namespace HallowGear
             d["alert"] = line == null ? null : new Dictionary<string, object> { { "text", line.Title }, { "level", line.Kind }, { "device", line.Key }, { "time", Family.Time(line.At) } };
             d["lastRead"] = LastRead.HasValue ? Family.Time(LastRead.Value) : null;
             d["startsWithWindows"] = StartsWithWindows(); d["look"] = Program.Light ? "light" : "dark";
+            d["toasts"] = ToastWord;   // 1.2: "on" (Windows toasts with the device icon), "fallback" (tray balloon / Hub), "off" (switched off in Windows)
             d["lastCrash"] = Crash.LastTime() == null ? null : Family.Time(Crash.LastTime().Value);
             if (GearSettings.TestDir != null) { lock (log) d["log"] = log.ToArray(); d["notifications"] = Notifications; }
             return d;
@@ -482,6 +531,12 @@ namespace HallowGear
                 case "test-bt-hide": { var p = arg.Split(' '); SetBtHidden(p[0], p.Length > 1 && p[1] == "on"); WriteStatus(); return "ok"; }
                 case "test-bt-alerts": { var p = arg.Split(' '); SetBtAlerts(p[0], p.Length > 1 && p[1] == "on"); return "ok"; }
                 case "test-notes": lock (Shown) return "ok " + Family.Json(Shown.Select(n => n[1]).ToList());
+                case "test-note-files":
+                    {   // 1.2: the icon files the latest device alert would use (written to <test dir>\icons; nothing is shown)
+                        var last = Router.Held.LastOrDefault(); var key = arg.Length > 0 ? arg : last != null ? last.Key : null; if (key == null) return "error no device";
+                        var n = MakeNote("t", "t", new GearAlert { Key = key, Kind = "low" }, false);
+                        return "ok " + Family.Json(new Dictionary<string, object> { { "kind", n.Kind }, { "state", n.State }, { "logo", n.LogoFile }, { "ico", n.IcoFile }, { "xml", Toasts.Xml(n) } });
+                    }
             }
             if (fake == null) return "error unknown test command";
             switch (cmd)

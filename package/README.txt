@@ -37,6 +37,14 @@ GOOD TO KNOW
 - Not supported: other brands' 2.4 GHz dongles (Razer, SteelSeries, Corsair...), the A50 Gen 4
   and the A50 X.
 
+WHAT'S NEW IN 1.2
+- Notifications show the device's icon: mouse, headset, keyboard, earbuds, controller - red
+  with a low-battery mark when it's low, green with a bolt when it's charging or full. They're
+  real Windows notifications (Gear gives its own Start menu shortcut the ID Windows needs);
+  click one to open Hallow Gear on that device. Without it, the tray balloon shows the icon.
+- The device cards use the same icons; earbuds have an icon of their own.
+- Unchanged: nothing pops up during a game, and the alert texts are the same.
+
 WHAT'S NEW IN 1.1
 - Bluetooth batteries: every paired Bluetooth device that tells Windows its battery (earbuds,
   headsets, controllers, keyboards, mice) gets a card with its battery, connected / not

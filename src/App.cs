@@ -20,14 +20,14 @@ using WF = System.Windows.Forms;
 [assembly: AssemblyTitle("Hallow Gear")]
 [assembly: AssemblyProduct("Hallow Gear")]
 [assembly: AssemblyDescription("Battery and charging of your Logitech gear and Bluetooth devices")]
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 namespace HallowGear
 {
     public static class Program
     {
-        public const string Version = "1.1";
+        public const string Version = "1.2";
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
 
         [STAThread]
@@ -132,6 +132,33 @@ namespace HallowGear
             w.Show("devices"); Snap.Save(w, F("devices-asleep"), 940, 0);
             w.Show("settings"); Snap.Save(w, F("settings-hidden"), 940, 0);
             Snap.Save(CrashNotice.Make(Path.Combine(dir, "example.txt")), F("crash"), 440, 0);
+            if (sfx.Length == 0) SnapNotes(dir);
+        }
+        // 1.2: the toasts as Windows 11 (dark) shows them, and every device icon in dark and light - nothing is shown on screen
+        public static void SnapNotes(string dir)
+        {
+            var icons = Path.Combine(dir, "icons");
+            var notes = Toasts.PreviewNotes((k, s) => DeviceIcons.PngFile(k, s, 96, false, AccentHex, icons));
+            System.Windows.Media.ImageSource app = null;
+            try { using (var ic = System.Drawing.Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location)) app = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(ic.Handle, Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions()); } catch { }
+            Toasts.SavePng(Toasts.Preview(notes, app), Path.Combine(dir, "notifications.png"), 2);
+            Toasts.SavePng(IconSheet(), Path.Combine(dir, "device-icons.png"), 1);
+        }
+        static FrameworkElement IconSheet()
+        {
+            var sp = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+            foreach (var light in new[] { false, true })
+            {
+                var g = new System.Windows.Controls.StackPanel { Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(light ? "#F6F4FA" : "#14101B")), Margin = new Thickness(0) };
+                foreach (var k in DeviceIcons.Kinds)
+                {
+                    var row = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(12, 6, 12, 6) };
+                    foreach (var s in DeviceIcons.States) { var e = DeviceIcons.Element(k, s, 48, light, AccentHex); e.Margin = new Thickness(6); row.Children.Add(e); }
+                    g.Children.Add(row);
+                }
+                sp.Children.Add(g);
+            }
+            return sp;
         }
     }
 
