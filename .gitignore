@@ -1,0 +1,5 @@
+# build output
+HallowGear.exe
+tests/GearTests.exe
+tests/out/
+package/HallowGear.exe
