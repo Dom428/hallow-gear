@@ -21,14 +21,14 @@ using WF = System.Windows.Forms;
 [assembly: AssemblyTitle("Hallow Gear")]
 [assembly: AssemblyProduct("Hallow Gear")]
 [assembly: AssemblyDescription("Battery and charging of your Logitech gear and Bluetooth devices")]
-[assembly: AssemblyVersion("1.3.1.0")]
-[assembly: AssemblyFileVersion("1.3.1.0")]
+[assembly: AssemblyVersion("1.3.2.0")]
+[assembly: AssemblyFileVersion("1.3.2.0")]
 
 namespace HallowGear
 {
     public static class Program
     {
-        public const string Version = "1.3.1";
+        public const string Version = "1.3.2";
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
 
         [STAThread]
@@ -152,7 +152,7 @@ namespace HallowGear
             // the mouse on its cable and charging, the headset low and undocked, a game running with the held alert
             fake.Devices[0].Wired = true; fake.Devices[0].Charging = true; fake.Devices[0].Battery = 71; fake.Devices[0].External = true; fake.Devices[0].Via = "USB cable + LIGHTSPEED receiver";
             fake.Devices[1].Full = false; fake.Devices[1].External = false; fake.Devices[1].Battery = 9;
-            c.SnapGame("Delta Force"); c.ReadNow(true, true, false); c.SnapWaiting();   // 1.3.1: the mouse paired, waiting for its battery report, last known 66 %
+            c.SnapGame("Delta Force"); c.ReadNow(true, true, false); c.SnapWaiting();   // 1.3.1: the mouse paired, waiting for its battery report, last known 66%
             w.Show("devices"); Snap.Save(w, F("devices-game"), 940, 0);
             // asleep and not connected
             fake.Reset(); fake.Devices[0].Asleep = true; fake.Devices[0].Note = "Asleep or switched off - move it to wake it."; fake.Devices[1].Connected = false; fake.Devices[1].Battery = null; fake.Devices[1].Note = "The base station isn't plugged in.";
@@ -166,8 +166,8 @@ namespace HallowGear
         static FrameworkElement PopupSample()
         {
             var sp = new System.Windows.Controls.StackPanel { Margin = new Thickness(24) };
-            var a = GearPopup.Card("mouse", "critical", "Mouse battery very low: 9 %", "PRO X SUPERLIGHT 2 is at 9 %. Plug in its cable or put it on its charger.", () => { }, () => { });
-            var b = GearPopup.Card("headset", "low", "Headset battery low: 19 %", "ASTRO A50 is at 19 %. Put it on the base station to charge.", () => { }, () => { });
+            var a = GearPopup.Card("mouse", "critical", "Mouse battery very low: 9%", "PRO X SUPERLIGHT 2 is at 9%. Plug in its cable or put it on its charger.", () => { }, () => { });
+            var b = GearPopup.Card("headset", "low", "Headset battery low: 19%", "ASTRO A50 is at 19%. Put it on the base station to charge.", () => { }, () => { });
             b.Margin = new Thickness(0, 10, 0, 0); sp.Children.Add(a); sp.Children.Add(b);
             return new System.Windows.Controls.Border { Background = (System.Windows.Media.Brush)Application.Current.FindResource("Bg"), Child = sp };
         }

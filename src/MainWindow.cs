@@ -189,7 +189,7 @@ namespace HallowGear
             if (d.HasBattery)
             {
                 var row = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-                var pct = new TextBlock { Text = d.Battery.HasValue ? d.Battery + " %" : "\u2013 %", FontFamily = Ui.Mono, FontSize = 22, FontWeight = FontWeights.SemiBold, Width = 86, VerticalAlignment = VerticalAlignment.Center };
+                var pct = new TextBlock { Text = Fmt.Pct(d.Battery, "\u2013%"), FontFamily = Ui.Mono, FontSize = 22, FontWeight = FontWeights.SemiBold, Width = 86, VerticalAlignment = VerticalAlignment.Center };
                 if (d.Estimated) pct.ToolTip = "Estimated from the battery's voltage or level";
                 DockPanel.SetDock(pct, Dock.Right); row.Children.Add(pct);
                 var track = new Border { Height = 12, CornerRadius = new CornerRadius(3), Background = Ui.R("LineDim"), BorderBrush = Ui.R("Line"), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0) };
@@ -265,8 +265,8 @@ namespace HallowGear
             sp.Children.Add(new TextBlock { Text = "Settings", FontSize = 22, FontFamily = Ui.Head, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 14) });
             sp.Children.Add(Section("Alerts",
                 Ui.Switch("Low battery alerts (once per discharge at each level)", S.AlertLow, v => { S.AlertLow = v; c.SaveSettings(); }),
-                Chips("Low at", new[] { 10, 15, 20, 25, 30 }, S.Low1, v => v + " %", v => { S.Low1 = v; if (S.Low2 >= v) S.Low2 = Math.Max(1, v - 5); c.SaveSettings(); }),
-                Chips("Very low at", new[] { 5, 10, 15 }.Where(x => x < S.Low1).ToArray(), S.Low2, v => v + " %", v => { S.Low2 = v; c.SaveSettings(); }),
+                Chips("Low at", new[] { 10, 15, 20, 25, 30 }, S.Low1, v => Fmt.Pct(v), v => { S.Low1 = v; if (S.Low2 >= v) S.Low2 = Math.Max(1, v - 5); c.SaveSettings(); }),
+                Chips("Very low at", new[] { 5, 10, 15 }.Where(x => x < S.Low1).ToArray(), S.Low2, v => Fmt.Pct(v), v => { S.Low2 = v; c.SaveSettings(); }),
                 Ui.Switch("Charging started", S.AlertCharging, v => { S.AlertCharging = v; c.SaveSettings(); }),
                 Ui.Switch("Fully charged", S.AlertFull, v => { S.AlertFull = v; c.SaveSettings(); }),
                 Ui.Switch("Switched to wired / wireless", S.AlertWired, v => { S.AlertWired = v; c.SaveSettings(); }),
@@ -360,9 +360,9 @@ namespace HallowGear
             Func<string, int, Action> play = (snd, vol) => () => GearSound.Play(GearSound.For(snd, vol));
             var outside = Pick("Outside games", GearSound.Normal, S.SoundNormal, v => GearSound.Label(v, false), v => { S.SoundNormal = v; c.SaveSettings(); });
             var during = Pick("During games", GearSound.Game, S.SoundGame, v => GearSound.Label(v, true), v => { S.SoundGame = v; c.SaveSettings(); });
-            var vol1 = Pick("Hallow sound volume", new[] { "40", "70", "100" }, S.SoundVolume.ToString(), v => v + " %", v => { S.SoundVolume = int.Parse(v); c.SaveSettings(); });
+            var vol1 = Pick("Hallow sound volume", new[] { "40", "70", "100" }, S.SoundVolume.ToString(), v => v + "%", v => { S.SoundVolume = int.Parse(v); c.SaveSettings(); });
             ((Panel)vol1).Children.Add(Ui.Btn("Play", play(GearSound.Hallow, S.SoundVolume), false, "Plays the Hallow sound at this volume"));
-            var vol2 = Pick("In-game volume", new[] { "10", "20", "30", "50" }, S.GameVolume.ToString(), v => v + " %", v => { S.GameVolume = int.Parse(v); c.SaveSettings(); });
+            var vol2 = Pick("In-game volume", new[] { "10", "20", "30", "50" }, S.GameVolume.ToString(), v => v + "%", v => { S.GameVolume = int.Parse(v); c.SaveSettings(); });
             ((Panel)vol2).Children.Add(Ui.Btn("Play", play(S.SoundGame == GearSound.Silent ? GearSound.Hallow : S.SoundGame, S.GameVolume), false, "Plays the in-game sound (the pop-up's) at this volume"));
             return Section("Sound", outside, vol1, during, vol2,
                 Ui.Muted("Windows notifications use Windows' own sound or none. The Hallow sound and the pop-up's sound are Gear's own, played on your default audio device at the volume above. Hallow Gear never changes the game's or Windows' volume - its sound is made quieter before it plays.", 11.5, 0));
@@ -421,7 +421,7 @@ namespace HallowGear
                 var al = new ToggleButton { Content = alertsOn ? "Alerts on" : "Alerts off", Style = Ui.S("Chip"), IsChecked = alertsOn && !hidden, IsEnabled = !hidden, ToolTip = "Low battery alerts for this device" };
                 al.Click += (s, e) => { c.SetBtAlerts(key, !alertsOn); BuildPage(); };
                 btns.Children.Add(show); btns.Children.Add(al); row.Children.Add(btns);
-                var label = Icons.WithText(KindIcon(d), d.Name + "  \u00B7  " + (d.Battery.HasValue ? d.Battery + " %" : "\u2013 %") + (d.Connected ? "" : " (not connected)"), 14, Ui.R(hidden ? "Faint" : "AccentBrush"));
+                var label = Icons.WithText(KindIcon(d), d.Name + "  \u00B7  " + Fmt.Pct(d.Battery, "\u2013%") + (d.Connected ? "" : " (not connected)"), 14, Ui.R(hidden ? "Faint" : "AccentBrush"));
                 label.VerticalAlignment = VerticalAlignment.Center; row.Children.Add(label);
                 items.Add(row);
             }

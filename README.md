@@ -54,8 +54,8 @@ even a Bluetooth notification switch - so updating firmware stays with Logitech'
 - Other Logitech HID++ 2.0 devices (a second mouse, a wireless keyboard, a Bolt or Unifying receiver, a Logitech device on
   Bluetooth) use the same reads as the tested PRO X 2 and are tested with made-up devices, not real ones.
 
-On the developer's PC (read-only probes): the mouse (`PRO X 2`, receiver slot 1, HID++ 4) reported 66 % on battery through
-Unified Battery; the A50 base station reported 26 %, off the dock; the G713 showed as a wired keyboard. The 1.1 probe found **no
+On the developer's PC (read-only probes): the mouse (`PRO X 2`, receiver slot 1, HID++ 4) reported 66% on battery through
+Unified Battery; the A50 base station reported 26%, off the dock; the G713 showed as a wired keyboard. The 1.1 probe found **no
 paired Bluetooth devices** on that PC (no classic or LE device nodes, nothing in Windows' paired lists) - so there was no Bluetooth
 battery to read.
 
@@ -101,7 +101,7 @@ G HUB's local websocket (undocumented) - it doesn't need to.
   starts* (default) / *every 5 min* / *never*. A Gear that was already running when the game started asks the mouse nothing during
   it. The A50's base station (a separate USB device) is read at most every 2 minutes.
 - **Remembered gear (1.3.1):** `%APPDATA%\HallowGear\devices.json` keeps each Logitech / A50 device's kind, name, last battery,
-  last state and last seen. After a restart every device shows at once as **"last known: 66 % · 12 min ago"** until fresh data
+  last state and last seen. After a restart every device shows at once as **"last known: 66% · 12 min ago"** until fresh data
   arrives (remembered values never raise an alert). A receiver slot's battery feature is remembered too - only to *listen* to its
   reports in a later session, never to ask with it.
 - **Bluetooth devices**: at most every **5 minutes** (and on Refresh), never during a game - then only the battery notifications a
@@ -110,7 +110,7 @@ G HUB's local websocket (undocumented) - it doesn't need to.
 
 ## Alerts
 
-- **Low battery** at 20 % and **very low** at 10 % (both configurable), once per discharge each (charging re-arms them; for a
+- **Low battery** at 20% and **very low** at 10% (both configurable), once per discharge each (charging re-arms them; for a
   Bluetooth device, which doesn't report charging, the battery climbing 10 points re-arms them). The same rules for every device.
 - **Charging started** and **fully charged**; **switched to wired / wireless** (off by default).
 - **With the device's icon (1.2).** Real Windows notifications with the icon of the device they're about: mouse, headset, keyboard,
@@ -143,7 +143,7 @@ G HUB's local websocket (undocumented) - it doesn't need to.
 - **Sound (1.3):** outside games **Windows' sound** (default), the **Hallow sound** or **silent**; during games **silent** (default), a
   **quiet Hallow sound** or **Windows' sound**. Toasts carry `<audio silent="true"/>` or `ms-winsoundevent:Notification.Default`;
   the Hallow sound and the pop-up's sound are Gear's own short chime (or Windows' notification sound) played on the default audio
-  device at the volume you pick (Hallow sound 40 / 70 / 100 %, in-game 10 / 20 / 30 / 50 %). Gear **never changes the game's or
+  device at the volume you pick (Hallow sound 40 / 70 / 100%, in-game 10 / 20 / 30 / 50%). Gear **never changes the game's or
   Windows' volume**: it makes its own samples quieter before playing them, and it imports no volume API at all (a test checks).
 - Nothing is ever shown twice: a pop-up, a toast and the after-game summary each get an alert only once.
 
@@ -155,7 +155,7 @@ G HUB's local websocket (undocumented) - it doesn't need to.
 
 ![Every device icon and state, dark and light](docs/device-icons.png)
 
-![While you play: the mouse waiting for its battery report (last known 66 %), the headset at 9 % (made-up data)](docs/devices-game.png)
+![While you play: the mouse waiting for its battery report (last known 66%), the headset at 9% (made-up data)](docs/devices-game.png)
 
 ## Hallow family
 
@@ -179,7 +179,7 @@ G HUB's local websocket (undocumented) - it doesn't need to.
   `kind` = `mouse`, `headset`, `keyboard` (or another HID++ type), and for Bluetooth devices also `earbuds`, `controller`, `other`. `state` = `charging`, `full`, `on-battery`, `wired`, `wireless`
   (connected, battery not known yet), `asleep` or `not-connected`. `battery` is null for a keyboard or while unknown. `paused` = not
   asked during a game (the value is the last one read or heard). `polling` = `normal`, `on-battery` or `game`. `alert` =
-  `{"text":"Mouse battery low: 18 %","level":"low|critical","device":"mouse:pro x 2","time":"...","deviceName":"PRO X 2"}` only while a
+  `{"text":"Mouse battery low: 18%","level":"low|critical","device":"mouse:pro x 2","time":"...","deviceName":"PRO X 2"}` only while a
   game runs and a low-battery alert is being held (for Hallow Overlay). Device names are model names (nothing private). 1.2.2 adds
   `id` per device and `deviceName` in `alert`; `device` / `id` is the device's **opaque id** - a Logitech device's model-name key, and for
   a Bluetooth device `bt-` + 12 hex digits (a salted SHA-256, the same for that device on this PC) - **never a Bluetooth address**.

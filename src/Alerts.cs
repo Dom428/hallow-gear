@@ -1,5 +1,5 @@
 ﻿// Hallow Gear - the battery alert rules and the 24-hour history.
-//   low (Low1, default 20 %) and very low (Low2, default 10 %): once per discharge each (charging re-arms them; so does the level
+//   low (Low1, default 20%) and very low (Low2, default 10%): once per discharge each (charging re-arms them; so does the level
 //   climbing 10 points above a threshold, e.g. a fresh battery); charging started; fully charged; wired <-> wireless (off by default).
 //   While a game runs nothing pops up: alerts are held and shown after the game; a low battery goes to Hallow Overlay as a quiet line.
 using System;
@@ -38,7 +38,7 @@ namespace HallowGear
             bool charging = d.Charging, full = d.Full;
             if (s.Known)
             {
-                if (charging && !s.Charging && r.Charging) list.Add(A("charging", Word(d) + " is charging", name + " started charging" + (d.Battery.HasValue ? " at " + d.Battery + " %." : ".")));
+                if (charging && !s.Charging && r.Charging) list.Add(A("charging", Word(d) + " is charging", name + " started charging" + (d.Battery.HasValue ? " at " + Fmt.Pct(d.Battery, "") + "." : ".")));
                 if (full && !s.Full && r.Full) list.Add(A("full", Word(d) + " is fully charged", name + " is fully charged" + (d.Kind == "headset" ? " - ready to go." : ".")));
                 if (d.Wired != s.Wired && r.Wired) list.Add(A(d.Wired ? "wired" : "wireless", Word(d) + (d.Wired ? " switched to wired" : " switched to wireless"), name + (d.Wired ? " is on its USB cable now." : " is wireless again.")));
             }
@@ -53,7 +53,7 @@ namespace HallowGear
                 {
                     int worst = hit.Min(); bool critical = worst == levels.Min() && levels.Count > 1;
                     foreach (var t in levels.Where(t => p <= t)) s.Fired.Add(t);
-                    if (r.Low) list.Add(A(critical ? "critical" : "low", Word(d) + " battery " + (critical ? "very low" : "low") + ": " + p + " %", name + " is at " + p + " %" + (d.Estimated ? " (estimated)" : "") + ". " + Advice(d)));
+                    if (r.Low) list.Add(A(critical ? "critical" : "low", Word(d) + " battery " + (critical ? "very low" : "low") + ": " + Fmt.Pct(p), name + " is at " + Fmt.Pct(p) + (d.Estimated ? " (estimated)" : "") + ". " + Advice(d)));
                 }
             }
             s.Known = true; s.Charging = charging; s.Full = full; s.Wired = d.Wired;

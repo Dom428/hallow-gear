@@ -62,7 +62,7 @@ namespace HallowGear.Tests
         static void ToastXmlTests()
         {
             var logo = DeviceIcons.PngFile("mouse", "low", 96, false, Accent.Default);
-            var n = new Note { Title = "Mouse <battery> & \"low\": 20 %", Text = "PRO X 'SUPERLIGHT' 2 is at 20 %. Plug in <its> cable & go.", Kind = "mouse", State = "low", Key = "mouse:pro x & 'co'", LogoFile = logo };
+            var n = new Note { Title = "Mouse <battery> & \"low\": 20%", Text = "PRO X 'SUPERLIGHT' 2 is at 20%. Plug in <its> cable & go.", Kind = "mouse", State = "low", Key = "mouse:pro x & 'co'", LogoFile = logo };
             var xml = Toasts.Xml(n);
             var doc = new System.Xml.XmlDocument(); doc.LoadXml(xml);
             var texts = doc.SelectNodes("/toast/visual/binding/text").Cast<System.Xml.XmlNode>().ToList();
@@ -124,7 +124,7 @@ namespace HallowGear.Tests
             {
                 int t = 0, h = 0, b = 0;
                 var s = new NoteSender { Toasts = () => ts, HubHosts = () => hub, ShowToast = n => { t++; return toastOk; }, SendHub = n => { h++; return hubOk; }, ShowBalloon = n => { b++; return true; } };
-                s.Send(new Note { Title = "Mouse battery low: 20 %", Text = "x", Key = "m" });
+                s.Send(new Note { Title = "Mouse battery low: 20%", Text = "x", Key = "m" });
                 return new[] { t, h, b };
             };
             Func<int[], string> S = a => string.Join(",", a);
@@ -150,7 +150,7 @@ namespace HallowGear.Tests
             Ok(sent >= 1 && sent <= 3, "after the game: at most 3 (" + sent + ", the rest as one summary)");
             // the preview's alerts come from the real rules
             var pv = Toasts.PreviewNotes((k, s) => null);
-            Ok(pv.Count == 7 && pv[0].Title == "Mouse battery low: 20 %" && pv[1].State == "critical" && pv[2].State == "charging" && pv[4].State == "full" && pv[5].Kind == "earbuds" && pv[6].Kind == "controller", "preview: 7 alerts from the real rules (" + string.Join(" | ", pv.Select(x => x.Title)) + ")");
+            Ok(pv.Count == 7 && pv[0].Title == "Mouse battery low: 20%" && pv[1].State == "critical" && pv[2].State == "charging" && pv[4].State == "full" && pv[5].Kind == "earbuds" && pv[6].Kind == "controller", "preview: 7 alerts from the real rules (" + string.Join(" | ", pv.Select(x => x.Title)) + ")");
         }
     }
 }

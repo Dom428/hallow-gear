@@ -343,7 +343,7 @@ namespace HallowGear
         {
             if (SnapMode || GearSettings.TestDir != null) return null;
             var mon = PopupScreen(false) ?? PopupScreen(true); if (mon == null) return null;
-            Popups.Show(close => GearPopup.Card("mouse", "critical", "Mouse battery very low: 9 %", "PRO X SUPERLIGHT 2 is at 9 %. Plug in its cable or put it on its charger.", close, () => { close(); ShowMain("devices"); }), mon, S.PopupCorner, S.PopupSeconds);
+            Popups.Show(close => GearPopup.Card("mouse", "critical", "Mouse battery very low: 9%", "PRO X SUPERLIGHT 2 is at 9%. Plug in its cable or put it on its charger.", close, () => { close(); ShowMain("devices"); }), mon, S.PopupCorner, S.PopupSeconds);
             GearSound.Play(GearSound.For(S.SoundGame, S.GameVolume));
             return mon.Label;
         }
@@ -673,7 +673,7 @@ namespace HallowGear
         {
             var items = new List<object>();
             foreach (var d in VisibleDevices.Where(x => x.HasBattery).Take(5))
-                items.Add(new Dictionary<string, object> { { "id", "open-devices" }, { "label", d.Name + ": " + (d.Battery.HasValue ? d.Battery + " %" : "-") + " \u00B7 " + d.StateLabel }, { "enabled", false } });
+                items.Add(new Dictionary<string, object> { { "id", "open-devices" }, { "label", d.Name + ": " + Fmt.Pct(d.Battery, "-") + " \u00B7 " + d.StateLabel }, { "enabled", false } });
             if (items.Count > 0) items.Add(new Dictionary<string, object> { { "id", "-" } });
             items.Add(new Dictionary<string, object> { { "id", "refresh" }, { "label", "Refresh now" } });
             items.Add(new Dictionary<string, object> { { "id", "alerts" }, { "label", "Low battery alerts" }, { "checked", S.AlertLow } });

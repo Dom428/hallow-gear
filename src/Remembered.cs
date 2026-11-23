@@ -1,5 +1,5 @@
 ﻿// Hallow Gear 1.3.1 - remembered gear: %APPDATA%\HallowGear\devices.json keeps each Logitech / A50 device's kind, name, last battery,
-// last state and when it was last seen, so a restart (even in the middle of a game) shows every device at once - "last known: 66 % - 12 min
+// last state and when it was last seen, so a restart (even in the middle of a game) shows every device at once - "last known: 66% - 12 min
 // ago" - until fresh data arrives. Bluetooth devices have their own memory (settings.json BtKnown). Nothing secret, nothing sent anywhere.
 using System;
 using System.Collections.Generic;
@@ -88,11 +88,11 @@ namespace HallowGear
             d.Updated = Parse(r.Updated); d.LastSeen = Parse(r.Seen);
             return d;
         }
-        // "last known: 66 % \u00B7 12 min ago" (the age of the battery reading, else of the last sighting)
+        // "last known: 66% \u00B7 12 min ago" (the age of the battery reading, else of the last sighting)
         public static string LastKnownText(GearDevice d, DateTime now)
         {
             var when = d.Updated ?? d.LastSeen;
-            return "last known: " + (d.HasBattery && d.Battery.HasValue ? d.Battery + " %" : d.StateLabel.ToLowerInvariant()) + (when.HasValue ? " \u00B7 " + MainWindow.Ago(when, now) : "");
+            return "last known: " + (d.HasBattery && d.Battery.HasValue ? Fmt.Pct(d.Battery.Value) : d.StateLabel.ToLowerInvariant()) + (when.HasValue ? " \u00B7 " + MainWindow.Ago(when, now) : "");
         }
     }
 }

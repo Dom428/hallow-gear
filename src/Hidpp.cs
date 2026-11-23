@@ -85,7 +85,7 @@ namespace HallowGear
             var b = new BatteryReading { Source = "HID++ Unified Battery (0x1004)" };
             int lvl = p[1];
             b.Level = (lvl & 8) != 0 ? "full" : (lvl & 4) != 0 ? "good" : (lvl & 2) != 0 ? "low" : (lvl & 1) != 0 ? "critical" : null;
-            // 1.3.1: 0 % with a level above "critical" = the device doesn't report a percentage (the start-up read skips getCapabilities)
+            // 1.3.1: 0% with a level above "critical" = the device doesn't report a percentage (the start-up read skips getCapabilities)
             if (socSupported && p[0] <= 100 && !(p[0] == 0 && (lvl & 0x0E) != 0)) b.Percent = p[0];
             else if (b.Level != null) { b.Percent = b.Level == "full" ? 100 : b.Level == "good" ? 60 : b.Level == "low" ? 20 : 5; b.Estimated = true; }
             switch (p[2]) { case 1: case 2: b.Charging = true; break; case 3: b.Full = true; break; }

@@ -145,7 +145,7 @@ namespace HallowGear.Tests
                         Program.AccentHex = Accent.Default;
                         app.Resources.MergedDictionaries.Add((ResourceDictionary)System.Windows.Markup.XamlReader.Parse(Accent.ApplyTo(x, Ui.Readable(Program.AccentHex))));
                     }
-                    var card = GearPopup.Card("mouse", "critical", "Mouse battery very low: 9 %", "x", () => { }, () => { });
+                    var card = GearPopup.Card("mouse", "critical", "Mouse battery very low: 9%", "x", () => { }, () => { });
                     var all = new List<DependencyObject>(); Action<DependencyObject> walk = null;
                     walk = o => { all.Add(o); foreach (var ch in LogicalTreeHelper.GetChildren(o).OfType<DependencyObject>()) walk(ch); }; walk(card);
                     res["focusable"] = all.OfType<UIElement>().Count(u => u.Focusable); res["buttons"] = all.Count(o => o is System.Windows.Controls.Primitives.ButtonBase); res["elements"] = all.Count;
@@ -193,7 +193,7 @@ namespace HallowGear.Tests
 
         static void GamingSound()
         {
-            Func<string, System.Xml.XmlDocument> X = snd => { var d = new System.Xml.XmlDocument(); d.LoadXml(Toasts.Xml(new Note { Title = "Mouse battery low: 20 %", Text = "x", Key = "m", Sound = snd })); return d; };
+            Func<string, System.Xml.XmlDocument> X = snd => { var d = new System.Xml.XmlDocument(); d.LoadXml(Toasts.Xml(new Note { Title = "Mouse battery low: 20%", Text = "x", Key = "m", Sound = snd })); return d; };
             var win = X("windows").SelectSingleNode("/toast/audio"); var sil = X("silent").SelectSingleNode("/toast/audio"); var hal = X("hallow").SelectSingleNode("/toast/audio");
             Ok(win != null && win.Attributes["src"].Value == "ms-winsoundevent:Notification.Default" && win.Attributes["silent"] == null, "sound 'Windows sound' -> <audio src=\"ms-winsoundevent:Notification.Default\"/>");
             Ok(sil != null && sil.Attributes["silent"].Value == "true" && sil.Attributes["src"] == null, "sound 'Silent' -> <audio silent=\"true\"/>");
@@ -214,9 +214,9 @@ namespace HallowGear.Tests
             var c30 = GearSound.Chime(30); var c100 = GearSound.Chime(100);
             Ok(System.Text.Encoding.ASCII.GetString(c30, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(c30, 8, 4) == "WAVE" && BitConverter.ToInt16(c30, 22) == 1 && BitConverter.ToInt32(c30, 24) == 44100 && c30.Length > 44 + 44100 / 5 * 2, "the Hallow sound: a 16-bit mono WAV, about a quarter of a second");
             int p30 = GearSound.Peak(c30), p100 = GearSound.Peak(c100);
-            Ok(p30 > 0 && p30 < p100 && Math.Abs(p30 - p100 * 0.3) < 400 && p100 <= 0.55 * 32767 + 1, "its volume is in the samples: 30 % peaks at " + p30 + ", 100 % at " + p100);
+            Ok(p30 > 0 && p30 < p100 && Math.Abs(p30 - p100 * 0.3) < 400 && p100 <= 0.55 * 32767 + 1, "its volume is in the samples: 30% peaks at " + p30 + ", 100% at " + p100);
             var half = GearSound.Scale(c100, 50);
-            Ok(half != null && Math.Abs(GearSound.Peak(half) - p100 / 2) <= 1 && half.Length == c100.Length && GearSound.Scale(new byte[] { 1, 2, 3 }, 50) == null, "a WAV is made quieter by scaling its samples (50 %: " + GearSound.Peak(half) + "); not a WAV -> nothing");
+            Ok(half != null && Math.Abs(GearSound.Peak(half) - p100 / 2) <= 1 && half.Length == c100.Length && GearSound.Scale(new byte[] { 1, 2, 3 }, 50) == null, "a WAV is made quieter by scaling its samples (50%: " + GearSound.Peak(half) + "); not a WAV -> nothing");
             Ok(GearSound.For("silent", 50) == null && GearSound.For("hallow", 50) != null && GearSound.For("windows", 50) != null, "the pop-up's sound: none when silent, the Hallow sound, or Windows' sound made quieter");
         }
 

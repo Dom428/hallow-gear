@@ -9,6 +9,13 @@ using System.Linq;
 
 namespace HallowGear
 {
+    // how every percentage reads in Gear: "45%" (no space); no value = the dash or text given
+    public static class Fmt
+    {
+        public static string Pct(int? v, string none) { return v.HasValue ? v.Value + "%" : none; }
+        public static string Pct(int v) { return v + "%"; }
+    }
+
     public class GearDevice
     {
         public string Key, Kind, Name, Via, Source, Note;

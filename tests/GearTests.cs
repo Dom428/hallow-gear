@@ -68,15 +68,15 @@ namespace HallowGear.Tests
             Ok(Hidpp.ErrorFor(B("10 02 8F 00 1D 09 00"), 2, 0, 1) == 9 && Hidpp.ErrorName(9).Contains("asleep"), "receiver error 0x09 = asleep / off");
             Ok(Hidpp.ErrorFor(reply, 1, 0, 0) == 0, "a good reply isn't an error");
             var u = Hidpp.Unified(B("42 04 00 00"), true);
-            Ok(u.Percent == 66 && !u.Charging && !u.Full && !u.External && u.Level == "good", "0x1004: 66 %, good, discharging");
+            Ok(u.Percent == 66 && !u.Charging && !u.Full && !u.External && u.Level == "good", "0x1004: 66%, good, discharging");
             u = Hidpp.Unified(B("4E 04 01 01"), true); Ok(u.Percent == 78 && u.Charging && u.External, "0x1004: charging on a cable");
             u = Hidpp.Unified(B("64 08 03 01"), true); Ok(u.Percent == 100 && u.Full && !u.Charging, "0x1004: full");
-            u = Hidpp.Unified(B("00 02 00 00"), false); Ok(u.Percent == 20 && u.Estimated && u.Level == "low", "0x1004 without percent: level 'low' -> about 20 % (estimated)");
+            u = Hidpp.Unified(B("00 02 00 00"), false); Ok(u.Percent == 20 && u.Estimated && u.Level == "low", "0x1004 without percent: level 'low' -> about 20% (estimated)");
             u = Hidpp.Unified(B("2A 04 02 01"), true); Ok(u.Charging, "0x1004: slow charging counts as charging");
-            var s = Hidpp.Status(B("50 32 01")); Ok(s.Percent == 80 && s.Charging, "0x1000: 80 % recharging");
+            var s = Hidpp.Status(B("50 32 01")); Ok(s.Percent == 80 && s.Charging, "0x1000: 80% recharging");
             s = Hidpp.Status(B("64 00 03")); Ok(s.Percent == 100 && s.Full, "0x1000: charged");
-            s = Hidpp.Status(B("0F 05 00")); Ok(s.Percent == 15 && !s.Charging && !s.External, "0x1000: 15 % discharging");
-            var v = Hidpp.Voltage(B("0F 3C 00")); Ok(v.Millivolts == 3900 && v.Estimated && v.Percent > 55 && v.Percent < 75 && !v.Charging, "0x1001: 3900 mV -> about " + v.Percent + " % (estimated)");
+            s = Hidpp.Status(B("0F 05 00")); Ok(s.Percent == 15 && !s.Charging && !s.External, "0x1000: 15% discharging");
+            var v = Hidpp.Voltage(B("0F 3C 00")); Ok(v.Millivolts == 3900 && v.Estimated && v.Percent > 55 && v.Percent < 75 && !v.Charging, "0x1001: 3900 mV -> about " + v.Percent + "% (estimated)");
             v = Hidpp.Voltage(B("10 2E 80")); Ok(v.Charging && v.External, "0x1001: external power + charging flag");
             v = Hidpp.Voltage(B("10 5A 81")); Ok(v.Full && v.Percent == 100, "0x1001: end of charge = full");
             Ok(Hidpp.PercentFromMillivolts(4200) == 100 && Hidpp.PercentFromMillivolts(3400) == 0 && Hidpp.PercentFromMillivolts(3800) > Hidpp.PercentFromMillivolts(3700), "voltage table runs the right way");
@@ -226,7 +226,7 @@ namespace HallowGear.Tests
             Ok(d.Ping() == 4, "ping: HID++ 4");
             Ok(d.Name() == "PRO X 2", "name read over getDeviceNameCount / getDeviceName");
             Ok(d.DeviceType() == 3, "type: mouse");
-            var b = d.Battery(); Ok(b != null && b.Percent == 66 && !b.Charging && d.BatteryFeature == Hidpp.UnifiedBattery && d.BatteryIndex == 5, "battery 66 % via Unified Battery at index 5");
+            var b = d.Battery(); Ok(b != null && b.Percent == 66 && !b.Charging && d.BatteryFeature == Hidpp.UnifiedBattery && d.BatteryIndex == 5, "battery 66% via Unified Battery at index 5");
             var asleep = new HidppDevice(port, null, 2) { ReplyMs = 300 }; Ok(asleep.Ping() == 0 && asleep.LastError == 9, "an asleep mouse: error 0x09");
             var empty = new HidppDevice(port, null, 4) { ReplyMs = 300 }; Ok(empty.Ping() == 0 && empty.LastError == 8, "an empty slot: error 0x08");
             var silent = new HidppDevice(new FakePort { Answer = q => null }, null, 1) { ReplyMs = 100 }; Ok(silent.Ping() == 0 && silent.LastError == -1, "no answer: -1, and no feature is cached as missing");
@@ -240,15 +240,15 @@ namespace HallowGear.Tests
             var r = SafeReport.ForA50(A50Proto.CmdBattery, A50Proto.HandleBattery, 64);
             Ok(r != null && Hex(r.Bytes, 6) == "02 0C 03 00 06 0C" && r.Length == 64 && r.Bytes.Skip(6).All(x => x == 0), "A50 battery GET = 02 0C 03 00 06 0C, padded to 64");
             var b = A50Proto.Battery(B("02 0C 06 00 06 00 55 00 01"));
-            Ok(b != null && b.Percent == 85 && b.Charging && b.External, "A50 reply: 85 %, docked = charging");
-            b = A50Proto.Battery(B("02 0C 06 00 06 00 1A 00 00")); Ok(b != null && b.Percent == 26 && !b.Charging && !b.External, "A50 reply: 26 %, off the dock");
-            b = A50Proto.Battery(B("02 0C 06 00 06 00 64 00 01")); Ok(b != null && b.Full && !b.Charging, "A50 reply: 100 % on the dock = full");
+            Ok(b != null && b.Percent == 85 && b.Charging && b.External, "A50 reply: 85%, docked = charging");
+            b = A50Proto.Battery(B("02 0C 06 00 06 00 1A 00 00")); Ok(b != null && b.Percent == 26 && !b.Charging && !b.External, "A50 reply: 26%, off the dock");
+            b = A50Proto.Battery(B("02 0C 06 00 06 00 64 00 01")); Ok(b != null && b.Full && !b.Charging, "A50 reply: 100% on the dock = full");
             Ok(A50Proto.Battery(B("02 0C 03 00 06 0C 00 00 00")) == null, "a bare ack (no payload) isn't a battery reading");
             Ok(A50Proto.Battery(B("02 0C 06 00 08 00 10 00 05")) == null, "a volume push isn't a battery reading");
             Ok(A50Proto.Battery(B("02 0C 06 00 06 00 C8 00 00")) == null, "nonsense percent (200) is ignored");
             var port = new FakePort { Answer = q => q[4] == 6 ? B("02 0C 06 00 06 00 47 00 00") : null };
             var rd = new A50Reader(port) { ReplyMs = 300 }; var got = rd.Battery();
-            Ok(got != null && got.Percent == 71 && port.Written.Count == 1 && port.Written[0][4] == 6, "A50 reader: one GET, 71 %");
+            Ok(got != null && got.Percent == 71 && port.Written.Count == 1 && port.Written[0][4] == 6, "A50 reader: one GET, 71%");
             Ok(A50Proto.IsControl(new HidInfo { Vid = 0x046D, Pid = 0x0B1C, UsagePage = 0xFF32, Usage = 0x74, Interface = 8, OutLen = 64 }) && !A50Proto.IsControl(new HidInfo { Vid = 0x046D, Pid = 0x0B1C, UsagePage = 0x000C, Interface = 3, OutLen = 0 }), "the A50's control interface is page 0xFF32 / interface 8");
         }
 
@@ -288,17 +288,17 @@ namespace HallowGear.Tests
         {
             var r = new AlertRules(); var a = new BatteryAlerts();
             var d = new GearDevice { Key = "mouse:m", Kind = "mouse", Name = "M", Battery = 30 };
-            Ok(string.Join(",", Feed(a, r, d, 30, 25, 21)) == "", "no alert above 20 %");
-            Ok(string.Join(",", Feed(a, r, d, 20)) == "low", "20 %: low, once");
+            Ok(string.Join(",", Feed(a, r, d, 30, 25, 21)) == "", "no alert above 20%");
+            Ok(string.Join(",", Feed(a, r, d, 20)) == "low", "20%: low, once");
             Ok(string.Join(",", Feed(a, r, d, 19, 18, 20, 15, 11)) == "", "...and not again while it drains (or wobbles)");
-            Ok(string.Join(",", Feed(a, r, d, 10)) == "critical", "10 %: very low, once");
+            Ok(string.Join(",", Feed(a, r, d, 10)) == "critical", "10%: very low, once");
             Ok(string.Join(",", Feed(a, r, d, 9, 5, 2)) == "", "...and not again");
             d.Charging = true; Ok(string.Join(",", Feed(a, r, d, 12)) == "charging", "charging started");
             Ok(string.Join(",", Feed(a, r, d, 40, 80)) == "", "no repeats while charging");
             d.Charging = false; d.Full = true; Ok(string.Join(",", Feed(a, r, d, 100)) == "full", "fully charged");
             d.Full = false; Ok(string.Join(",", Feed(a, r, d, 99, 50, 21, 20)) == "low", "a new discharge: low again (once per discharge)");
             var a2 = new BatteryAlerts(); var d2 = new GearDevice { Key = "h", Kind = "headset", Name = "ASTRO A50", Battery = 8 };
-            Ok(string.Join(",", Feed(a2, r, d2, 8)) == "critical" && string.Join(",", Feed(a2, r, d2, 7, 15)) == "", "first seen at 8 %: only 'very low', not both");
+            Ok(string.Join(",", Feed(a2, r, d2, 8)) == "critical" && string.Join(",", Feed(a2, r, d2, 7, 15)) == "", "first seen at 8%: only 'very low', not both");
             Ok(string.Join(",", Feed(a2, r, d2, 40, 20)) == "low", "jumping 10+ points above a level (a fresh battery) re-arms it");
             var a3 = new BatteryAlerts(); var d3 = new GearDevice { Key = "w", Kind = "mouse", Name = "M", Battery = 70 };
             Feed(a3, r, d3, 70); d3.Wired = true; Ok(Feed(a3, r, d3, 70).Count == 0, "wired / wireless: off by default");
@@ -308,7 +308,7 @@ namespace HallowGear.Tests
             var custom = new AlertRules { Low1 = 30, Low2 = 15 }; var a6 = new BatteryAlerts(); var d6 = new GearDevice { Key = "c", Kind = "mouse", Battery = 50 };
             Ok(string.Join(",", Feed(a6, custom, d6, 50, 30, 16, 15)) == "low,critical", "custom levels 30 / 15");
             var al = new BatteryAlerts().Update(new GearDevice { Key = "e", Kind = "mouse", Name = "M", Battery = 19, Estimated = true }, r, DateTime.Now).Single();
-            Ok(al.Title.Contains("19 %") && al.Text.Contains("estimated"), "the alert says the level and if it's an estimate: " + al.Text);
+            Ok(al.Title.Contains("19%") && al.Text.Contains("estimated"), "the alert says the level and if it's an estimate: " + al.Text);
         }
         static void GameHold()
         {
@@ -349,8 +349,8 @@ namespace HallowGear.Tests
         static void SettingsTests()
         {
             var s = new GearSettings { Low1 = 90, Low2 = 95, PollSeconds = 5 }; s.Fix();
-            Ok(s.Low1 == 50 && s.Low2 < s.Low1 && s.PollSeconds == 60, "settings are clamped (low <= 50 %, very low below low, at least 60 s)");
-            var d = new GearSettings(); d.Fix(); Ok(d.AlertLow && d.Low1 == 20 && d.Low2 == 10 && d.AlertCharging && d.AlertFull && !d.AlertWired && !d.ReadMouseInGames && d.PollSeconds == 60, "defaults: 20 / 10 %, charging + full on, wired switch off, mouse not asked in games, 60 s");
+            Ok(s.Low1 == 50 && s.Low2 < s.Low1 && s.PollSeconds == 60, "settings are clamped (low <= 50%, very low below low, at least 60 s)");
+            var d = new GearSettings(); d.Fix(); Ok(d.AlertLow && d.Low1 == 20 && d.Low2 == 10 && d.AlertCharging && d.AlertFull && !d.AlertWired && !d.ReadMouseInGames && d.PollSeconds == 60, "defaults: 20 / 10%, charging + full on, wired switch off, mouse not asked in games, 60 s");
         }
 
         // ---------------- 1.1: other Logitech HID++ 2.0 devices - a keyboard and a second mouse on other receiver slots, a Bluetooth mouse
@@ -396,10 +396,10 @@ namespace HallowGear.Tests
             Func<string, GearDevice> D = n => list.FirstOrDefault(x => x.Name == n);
             var m1 = D("PRO X 2"); var kb = D("G915 TKL"); var m2 = D("G502 X PLUS"); var bt = D("MX Master 3S");
             Ok(list.Count == 4, "receiver slots 1 / 3 / 5 + a Bluetooth Logitech mouse = 4 cards: " + string.Join(", ", list.Select(x => x.Name)));
-            Ok(m1 != null && m1.Kind == "mouse" && m1.Battery == 66 && m1.Via == "LIGHTSPEED receiver", "slot 1: the PRO X 2, 66 % (Unified Battery)");
-            Ok(kb != null && kb.Kind == "keyboard" && kb.Battery == 55 && kb.HasBattery && kb.Key == "keyboard:g915 tkl" && kb.State == "on-battery", "slot 3: a wireless keyboard gets a keyboard card, 55 % (Battery Status 0x1000)");
-            Ok(m2 != null && m2.Kind == "mouse" && m2.Estimated && m2.Battery > 55 && m2.Battery < 75 && m2.Key != m1.Key, "slot 5: a second mouse gets its own card, ~" + (m2 == null ? 0 : m2.Battery) + " % estimated (Battery Voltage 0x1001)");
-            Ok(bt != null && bt.Via == "Bluetooth" && !bt.Wired && bt.Battery == 90 && bt.State == "on-battery", "a Logitech mouse straight over Bluetooth: HID++ at index 0xFF, 90 %, not wired");
+            Ok(m1 != null && m1.Kind == "mouse" && m1.Battery == 66 && m1.Via == "LIGHTSPEED receiver", "slot 1: the PRO X 2, 66% (Unified Battery)");
+            Ok(kb != null && kb.Kind == "keyboard" && kb.Battery == 55 && kb.HasBattery && kb.Key == "keyboard:g915 tkl" && kb.State == "on-battery", "slot 3: a wireless keyboard gets a keyboard card, 55% (Battery Status 0x1000)");
+            Ok(m2 != null && m2.Kind == "mouse" && m2.Estimated && m2.Battery > 55 && m2.Battery < 75 && m2.Key != m1.Key, "slot 5: a second mouse gets its own card, ~" + (m2 == null ? 0 : m2.Battery) + "% estimated (Battery Voltage 0x1001)");
+            Ok(bt != null && bt.Via == "Bluetooth" && !bt.Wired && bt.Battery == 90 && bt.State == "on-battery", "a Logitech mouse straight over Bluetooth: HID++ at index 0xFF, 90%, not wired");
             var all = rxPort.Written.Concat(btPort.Written).ToList();
             var bad = all.Where(w =>
             {
@@ -421,7 +421,7 @@ namespace HallowGear.Tests
             Ok(cold.Any(x => x.Kind == "keyboard" && x.Name == "G915 TKL" && x.Paused) && cold.Count(x => x.Kind == "mouse" && x.Via == "LIGHTSPEED receiver") == 2 && rxPort.Written.Count + btPort.Written.Count == before, "a new session during a game: remembered slots shown with their kinds, still nothing sent");
             // the keyboard goes to sleep
             rxDevs[3].Asleep = true; var later = src.Read(true, true, false); var ks = later.FirstOrDefault(x => x.Name == "G915 TKL");
-            Ok(ks != null && ks.Kind == "keyboard" && ks.State == "asleep" && ks.Battery == 55 && ks.Note.Contains("press a key"), "an asleep keyboard: asleep, keeps 55 %, 'press a key to wake it'");
+            Ok(ks != null && ks.Kind == "keyboard" && ks.State == "asleep" && ks.Battery == 55 && ks.Note.Contains("press a key"), "an asleep keyboard: asleep, keeps 55%, 'press a key to wake it'");
             src.Dispose(); src2.Dispose();
             // paths and receivers
             Ok(LogiSource.IsBluetoothPath(btPath) && !LogiSource.IsBluetoothPath(infos[0].Path) && LogiSource.IsBluetoothPath(@"\\?\hid#{00001124-0000-1000-8000-00805f9b34fb}_vid&0002046d_pid&b01e#8&1&0&0000#{x}"), "Bluetooth HID paths (LE 0x1812, classic 0x1124) are told from USB ones");
@@ -437,11 +437,11 @@ namespace HallowGear.Tests
         // ---------------- 1.1: Bluetooth
         static void BtParsing()
         {
-            Ok(BtProto.Level(B("55")) == 85 && BtProto.Level(B("00")) == 0 && BtProto.Level(B("64")) == 100, "Battery Level 0x2A19: one byte, 85 / 0 / 100 %");
+            Ok(BtProto.Level(B("55")) == 85 && BtProto.Level(B("00")) == 0 && BtProto.Level(B("64")) == 100, "Battery Level 0x2A19: one byte, 85 / 0 / 100%");
             Ok(BtProto.Level(B("C8")) == null && BtProto.Level(new byte[0]) == null && BtProto.Level(null) == null, "Battery Level: 200 / empty / missing = unknown");
             Ok(BtProto.Level(B("2A 00 01")) == 42, "Battery Level: extra bytes are ignored");
-            Ok(BtProto.PnpBattery(0x03, B("50"), 1) == 80, "DEVPKEY_Bluetooth_Battery (DEVPROP_TYPE_BYTE): 80 %");
-            Ok(BtProto.PnpBattery(0x07, B("3C 00 00 00"), 4) == 60, "...a UINT32 value is read too: 60 %");
+            Ok(BtProto.PnpBattery(0x03, B("50"), 1) == 80, "DEVPKEY_Bluetooth_Battery (DEVPROP_TYPE_BYTE): 80%");
+            Ok(BtProto.PnpBattery(0x07, B("3C 00 00 00"), 4) == 60, "...a UINT32 value is read too: 60%");
             Ok(BtProto.PnpBattery(0x03, B("FF"), 1) == null && BtProto.PnpBattery(0x12, B("35 00"), 2) == null && BtProto.PnpBattery(0x03, B("50"), 0) == null, "...255, a string, or no value = unknown");
             Ok(BtProto.Address(@"BTHENUM\DEV_A0B1C2D3E4F5\7&2E1B3A0&0&BLUETOOTHDEVICE_A0B1C2D3E4F5") == "a0b1c2d3e4f5", "address from a classic device node (BTHENUM\\DEV_...)");
             Ok(BtProto.Address(@"BTHENUM\{0000111E-0000-1000-8000-00805F9B34FB}_LOCALMFG&0002\7&36D1D1A&0&A0B1C2D3E4F5_C00000000") == "a0b1c2d3e4f5", "...from a classic service node (hands-free)");
@@ -468,7 +468,7 @@ namespace HallowGear.Tests
             var now = new DateTime(2026, 11, 22, 12, 0, 0);
             var buds = new BtEntry { Address = "a0b1c2d3e4f5", Name = "Galaxy Buds2 Pro", Kind = "earbuds", Classic = true, Connected = true, Battery = 80, Source = BtProto.WindowsSource };
             var d = BtProto.ToDevice(buds, null, now);
-            Ok(d != null && d.Key == "bt:a0b1c2d3e4f5" && d.Kind == "earbuds" && d.Battery == 80 && d.Connected && d.Bluetooth && !d.Wired && d.Via == "Bluetooth" && d.Updated == now && d.LastSeen == now, "a connected device with a battery: a card, 80 %, connected, seen now");
+            Ok(d != null && d.Key == "bt:a0b1c2d3e4f5" && d.Kind == "earbuds" && d.Battery == 80 && d.Connected && d.Bluetooth && !d.Wired && d.Via == "Bluetooth" && d.Updated == now && d.LastSeen == now, "a connected device with a battery: a card, 80%, connected, seen now");
             Ok(d.State == "on-battery" && d.StateLabel == "Connected \u00B7 Bluetooth" && !d.Charging && !d.Full, "state on-battery (for Overlay), label 'Connected \u00B7 Bluetooth', never charging (not reported)");
             Ok(BtProto.ToDevice(new BtEntry { Address = "a1", Name = "Living Room TV", Kind = "other", Connected = true }, null, now) == null, "a device that never reported a battery: no card");
             var rem = BtProto.Remember(d);
@@ -496,13 +496,13 @@ namespace HallowGear.Tests
         {
             var r = new AlertRules(); var a = new BatteryAlerts();
             var d = new GearDevice { Key = "bt:a0", Kind = "earbuds", Name = "Galaxy Buds2 Pro", Bluetooth = true, Via = "Bluetooth", Battery = 40 };
-            Ok(string.Join(",", Feed(a, r, d, 40, 30, 21)) == "", "Bluetooth: nothing above 20 %");
+            Ok(string.Join(",", Feed(a, r, d, 40, 30, 21)) == "", "Bluetooth: nothing above 20%");
             var low = a.Update(new GearDevice { Key = "bt:a0", Kind = "earbuds", Name = "Galaxy Buds2 Pro", Bluetooth = true, Battery = 20 }, r, DateTime.Now);
-            Ok(low.Count == 1 && low[0].Kind == "low" && low[0].Title == "Earbuds battery low: 20 %" && low[0].Text.Contains("case"), "20 %: 'Earbuds battery low: 20 %' - put them in their case");
+            Ok(low.Count == 1 && low[0].Kind == "low" && low[0].Title == "Earbuds battery low: 20%" && low[0].Text.Contains("case"), "20%: 'Earbuds battery low: 20%' - put them in their case");
             Ok(string.Join(",", Feed(a, r, d, 19, 15, 12)) == "" && string.Join(",", Feed(a, r, d, 10)) == "critical" && string.Join(",", Feed(a, r, d, 8, 5)) == "", "once per discharge: low once, very low once");
-            Ok(string.Join(",", Feed(a, r, d, 85, 60, 20)) == "low", "no charging report: charged in its case (back to 85 %) re-arms the alerts");
+            Ok(string.Join(",", Feed(a, r, d, 85, 60, 20)) == "low", "no charging report: charged in its case (back to 85%) re-arms the alerts");
             var a2 = new BatteryAlerts(); var pad = new GearDevice { Key = "bt:a1", Kind = "controller", Name = "Xbox Wireless Controller", Bluetooth = true, Battery = 9 };
-            var c = a2.Update(pad, r, DateTime.Now); Ok(c.Count == 1 && c[0].Kind == "critical" && c[0].Text.Contains("batteries"), "a controller at 9 %: very low - plug it in or change its batteries");
+            var c = a2.Update(pad, r, DateTime.Now); Ok(c.Count == 1 && c[0].Kind == "critical" && c[0].Text.Contains("batteries"), "a controller at 9%: very low - plug it in or change its batteries");
             var off = new GearDevice { Key = "bt:a2", Kind = "headset", Name = "WH", Bluetooth = true, Battery = 5, Connected = false };
             Ok(new BatteryAlerts().Update(off, r, DateTime.Now).Count == 0, "a Bluetooth device that isn't connected: no alert for its old battery");
             var router = new AlertRouter(); router.Route(low, true);
@@ -522,12 +522,12 @@ namespace HallowGear.Tests
             if (res.Errors.HasErrors) return;
             var link = res.CompiledAssembly.GetType("HallowOverlay.GearLink");
             var g = link.GetMethod("Parse").Invoke(null, new object[] { json });
-            Ok(g != null && (bool)g.GetType().GetField("Running").GetValue(g) && (int)g.GetType().GetField("LowAt").GetValue(g) == 20, "Overlay parses Gear 1.1's status.json: running, low at 20 %");
+            Ok(g != null && (bool)g.GetType().GetField("Running").GetValue(g) && (int)g.GetType().GetField("LowAt").GetValue(g) == 20, "Overlay parses Gear 1.1's status.json: running, low at 20%");
             var chips = g == null ? new List<object>() : ((System.Collections.IEnumerable)g.GetType().GetField("Devices").GetValue(g)).Cast<object>().ToList();
             Func<object, string, object> F = (o, f) => o.GetType().GetField(f).GetValue(o);
             var desc = string.Join(", ", chips.Select(c => F(c, "Kind") + " " + F(c, "Name") + " " + F(c, "Pct") + "%"));
             Ok(chips.Count == 4 && chips.Any(c => (string)F(c, "Kind") == "earbuds" && (int)F(c, "Pct") == 80) && chips.Any(c => (string)F(c, "Kind") == "controller" && (int)F(c, "Pct") == 45) && !chips.Any(c => (string)F(c, "Name") == "WH-1000XM5"),
-                "Overlay's chips: mouse, headset, earbuds 80 %, controller 45 % - not the keyboard (no battery) nor the headphones that aren't connected: " + desc);
+                "Overlay's chips: mouse, headset, earbuds 80%, controller 45% - not the keyboard (no battery) nor the headphones that aren't connected: " + desc);
             Ok(link.GetMethod("Icon").Invoke(null, new object[] { "earbuds" }) != null && link.GetMethod("Usable").Invoke(null, new object[] { g, DateTime.Now }) is bool, "Overlay shows the new kinds with its fallback icon, and the status counts as fresh");
         }
 
@@ -565,7 +565,7 @@ namespace HallowGear.Tests
                 Ok(devs != null && devs.Any(x => (string)x["kind"] == "keyboard" && x["battery"] == null && (string)x["state"] == "wired") && devs.Any(x => (string)x["kind"] == "mouse" && x["battery"] is int), "keyboard: wired, no battery; mouse: a number");
                 Ok(devs != null && devs.All(x => x.ContainsKey("bluetooth") && x.ContainsKey("lastSeen") && x.ContainsKey("alerts")) && st.ContainsKey("bluetooth") && st.ContainsKey("hiddenDevices"), "1.1 adds bluetooth / lastSeen / alerts per device and bluetooth / hiddenDevices at the top (nothing renamed or removed)");
                 var buds = devs == null ? null : devs.FirstOrDefault(x => (string)x["name"] == "Galaxy Buds2 Pro"); var xm = devs == null ? null : devs.FirstOrDefault(x => (string)x["name"] == "WH-1000XM5");
-                Ok(buds != null && (string)buds["kind"] == "earbuds" && (int)buds["battery"] == 80 && (bool)buds["bluetooth"] && (bool)buds["connected"] && (string)buds["state"] == "on-battery" && !(bool)buds["charging"] && !(bool)buds["wired"], "Bluetooth earbuds: kind earbuds, 80 %, connected, on-battery, not charging");
+                Ok(buds != null && (string)buds["kind"] == "earbuds" && (int)buds["battery"] == 80 && (bool)buds["bluetooth"] && (bool)buds["connected"] && (string)buds["state"] == "on-battery" && !(bool)buds["charging"] && !(bool)buds["wired"], "Bluetooth earbuds: kind earbuds, 80%, connected, on-battery, not charging");
                 Ok(xm != null && !(bool)xm["connected"] && (string)xm["state"] == "not-connected" && xm["lastSeen"] != null && !devs.Any(x => (string)x["name"] == "Living Room TV"), "headphones not connected: not-connected with a last-seen time; a TV without battery has no card");
                 var file = Path.Combine(Dir, "status.json"); Ok(File.Exists(file) && J("ok " + File.ReadAllText(file)) != null, "status.json written (and valid JSON)");
                 OverlayCompat(File.ReadAllText(file));
@@ -582,20 +582,20 @@ namespace HallowGear.Tests
                 var rfc = CmdExit(exe, "refresh"); Ok(rfc == 0, "--cmd refresh exits 0 (even when it's too soon)");
                 // alerts: low -> a notification; during a game nothing pops up, the alert goes to status for Overlay; after the game it's shown
                 Cmd(exe, "test-battery 0 19");
-                var notes = Cmd(exe, "test-notes"); Ok(notes.Contains("Mouse battery low: 19 %"), "19 %: a low battery notification: " + notes);
+                var notes = Cmd(exe, "test-notes"); Ok(notes.Contains("Mouse battery low: 19%"), "19%: a low battery notification: " + notes);
                 Cmd(exe, "test-game Delta Force"); Cmd(exe, "test-battery 0 9");
                 var during = Cmd(exe, "test-notes"); st = J(Cmd(exe, "status"));
                 var alert = st == null ? null : st["alert"] as Dictionary<string, object>;
-                Ok(!during.Contains("very low") && alert != null && ((string)alert["text"]).Contains("9 %") && (string)alert["level"] == "critical" && (string)st["game"] == "Delta Force" && (int)st["held"] == 1, "in a game: no pop-up; status.alert for Overlay: " + (alert == null ? "none" : (string)alert["text"]));
+                Ok(!during.Contains("very low") && alert != null && ((string)alert["text"]).Contains("9%") && (string)alert["level"] == "critical" && (string)st["game"] == "Delta Force" && (int)st["held"] == 1, "in a game: no pop-up; status.alert for Overlay: " + (alert == null ? "none" : (string)alert["text"]));
                 var asks = J(Cmd(exe, "test-asks")); Cmd(exe, "invoke refresh"); Thread.Sleep(600);
                 Cmd(exe, "test-game off"); var after = Cmd(exe, "test-notes"); st = J(Cmd(exe, "status"));
-                Ok(after.Contains("Mouse battery very low: 9 %") && st["alert"] == null && (int)st["held"] == 0, "after the game: the held alert is shown, Overlay's line is gone");
+                Ok(after.Contains("Mouse battery very low: 9%") && st["alert"] == null && (int)st["held"] == 0, "after the game: the held alert is shown, Overlay's line is gone");
                 Ok(Cmd(exe, "test-popups") == "ok []", "1.3: with one monitor the very low battery fell back to the Overlay line + after the game - no pop-up");
                 // 1.3: two made-up monitors, the game on screen 1 -> the very low battery is Gear's pop-up on screen 2 (logged; tests never show a window)
                 Ok(Cmd(exe, "test-monitors \\\\.\\DISPLAY1 0 0 2560 1440 primary;\\\\.\\DISPLAY2 2560 0 1920 1080") == "ok 2", "1.3: a made-up layout of two monitors");
                 Cmd(exe, "test-battery 0 50"); Cmd(exe, "test-game Delta Force"); Cmd(exe, "test-battery 0 8");
                 var pops = Cmd(exe, "test-popups"); st = J(Cmd(exe, "status"));
-                Ok(pops.Contains("Mouse battery very low: 8 %") && pops.Contains("DISPLAY2 top-right") && st["alert"] == null && (int)st["held"] == 0 && !Cmd(exe, "test-notes").Contains("very low: 8 %"), "in a game, two monitors: very low -> the pop-up on the monitor without the game (" + pops + "); not held, no Overlay line, no toast");
+                Ok(pops.Contains("Mouse battery very low: 8%") && pops.Contains("DISPLAY2 top-right") && st["alert"] == null && (int)st["held"] == 0 && !Cmd(exe, "test-notes").Contains("very low: 8%"), "in a game, two monitors: very low -> the pop-up on the monitor without the game (" + pops + "); not held, no Overlay line, no toast");
                 Ok(Cmd(exe, "test-route mouse:pro x superlight 2 critical") == "ok popup \\\\.\\DISPLAY2", "test-route: very low -> pop-up on DISPLAY2");
                 Cmd(exe, "test-game-monitor \\\\.\\DISPLAY2");
                 Ok(Cmd(exe, "test-route mouse:pro x superlight 2 critical") == "ok popup \\\\.\\DISPLAY1", "the game on screen 2 -> the pop-up goes to screen 1");
@@ -605,17 +605,17 @@ namespace HallowGear.Tests
                 Ok(ov.StartsWith("ok overlay") && hs.StartsWith("ok toast") && Cmd(exe, "test-route mouse:pro x superlight 2 critical").StartsWith("ok popup"), "per device over the pipe: the mouse's very low -> Overlay, the headset -> Windows; back to default -> pop-up");
                 Cmd(exe, "test-set GameLow toast"); Cmd(exe, "test-battery 1 60"); Cmd(exe, "test-battery 1 18");
                 var winAnyway = Cmd(exe, "test-notes"); var logNow = J(Cmd(exe, "status"))["log"] as System.Collections.ArrayList;
-                Ok(winAnyway.Contains("Headset battery low: 18 %") && logNow != null && logNow.Cast<string>().Any(x => x.Contains("notify: Headset battery low: 18 % (in game, sound silent)")), "low battery set to 'Windows notification anyway': shown during the game, with the in-game sound (silent)");
+                Ok(winAnyway.Contains("Headset battery low: 18%") && logNow != null && logNow.Cast<string>().Any(x => x.Contains("notify: Headset battery low: 18% (in game, sound silent)")), "low battery set to 'Windows notification anyway': shown during the game, with the in-game sound (silent)");
                 Cmd(exe, "test-set GameLow hold"); Cmd(exe, "test-game off");
-                Ok(!Cmd(exe, "test-notes").Contains("Mouse battery very low: 8 %") && (int)J(Cmd(exe, "status"))["held"] == 0, "after the game: what popped up isn't shown again (no duplicate)");
+                Ok(!Cmd(exe, "test-notes").Contains("Mouse battery very low: 8%") && (int)J(Cmd(exe, "status"))["held"] == 0, "after the game: what popped up isn't shown again (no duplicate)");
                 Cmd(exe, "test-monitors \\\\.\\DISPLAY1 0 0 1920 1080 primary"); Cmd(exe, "test-game-monitor none");
                 // 1.1: Bluetooth alerts, per-device alerts off, hide / show, nothing new during a game, the switch
                 Cmd(exe, "test-bt 1 19"); notes = Cmd(exe, "test-notes");
-                Ok(notes.Contains("Controller battery low: 19 %"), "a Bluetooth controller at 19 %: 'Controller battery low: 19 %'");
+                Ok(notes.Contains("Controller battery low: 19%"), "a Bluetooth controller at 19%: 'Controller battery low: 19%'");
                 Cmd(exe, "test-bt 1 17"); Ok(Cmd(exe, "test-notes").Split(new[] { "Controller battery low" }, StringSplitOptions.None).Length == 2, "...once per discharge");
                 Cmd(exe, "test-bt-alerts bt:0a1b2c3d4e01 off"); Cmd(exe, "test-bt 0 9"); notes = Cmd(exe, "test-notes"); st = J(Cmd(exe, "status"));
                 var b2 = st == null ? null : ((System.Collections.ArrayList)st["devices"]).Cast<Dictionary<string, object>>().FirstOrDefault(x => (string)x["name"] == "Galaxy Buds2 Pro");
-                Ok(!notes.Contains("Earbuds battery") && b2 != null && (int)b2["battery"] == 9 && !(bool)b2["alerts"], "alerts off for the earbuds: 9 %, no notification, status says alerts false");
+                Ok(!notes.Contains("Earbuds battery") && b2 != null && (int)b2["battery"] == 9 && !(bool)b2["alerts"], "alerts off for the earbuds: 9%, no notification, status says alerts false");
                 Cmd(exe, "test-bt-hide bt:0a1b2c3d4e02 on"); st = J(Cmd(exe, "status"));
                 var names = st == null ? new List<string>() : ((System.Collections.ArrayList)st["devices"]).Cast<Dictionary<string, object>>().Select(x => (string)x["name"]).ToList();
                 Ok(names.Count == 5 && !names.Contains("Xbox Wireless Controller") && (int)st["hiddenDevices"] == 1 && !((System.Collections.ArrayList)st["low"]).Contains("Xbox Wireless Controller"), "a hidden device isn't in status.json (so not on Overlay either), nor in 'low'");
@@ -628,7 +628,7 @@ namespace HallowGear.Tests
                 Cmd(exe, "test-bt-hear bt:0a1b2c3d4e02 8"); Thread.Sleep(300); st = J(Cmd(exe, "status"));
                 var pad = ((System.Collections.ArrayList)st["devices"]).Cast<Dictionary<string, object>>().FirstOrDefault(x => (string)x["name"] == "Xbox Wireless Controller");
                 var al2 = st["alert"] as Dictionary<string, object>;
-                Ok(pad != null && (int)pad["battery"] == 8 && !(bool)pad["paused"] && !Cmd(exe, "test-notes").Contains("Controller battery very low") && al2 != null && ((string)al2["text"]).StartsWith("Controller battery very low: 8 %"), "...but a battery notification it sends by itself is heard (8 %): no pop-up, the alert goes to Overlay's line");
+                Ok(pad != null && (int)pad["battery"] == 8 && !(bool)pad["paused"] && !Cmd(exe, "test-notes").Contains("Controller battery very low") && al2 != null && ((string)al2["text"]).StartsWith("Controller battery very low: 8%"), "...but a battery notification it sends by itself is heard (8%): no pop-up, the alert goes to Overlay's line");
                 // 1.2.2: alert.device is an opaque id, never the Bluetooth address (pipe and status.json)
                 var dev = al2 == null ? null : al2["device"] as string;
                 Ok(dev != null && System.Text.RegularExpressions.Regex.IsMatch(dev, "^bt-[0-9a-f]{12}$") && !dev.Contains("0a1b2c3d4e02") && pad != null && (string)pad["id"] == dev && (string)al2["deviceName"] == "Xbox Wireless Controller", "alert.device is an opaque id (" + dev + "), the same as the device's id; deviceName added");
@@ -639,7 +639,7 @@ namespace HallowGear.Tests
                 var mouseId = ((System.Collections.ArrayList)st["devices"]).Cast<Dictionary<string, object>>().First(x => (string)x["kind"] == "mouse")["id"] as string;
                 Ok(mouseId == "mouse:pro x superlight 2", "a Logitech device keeps its model-name id: " + mouseId);
                 Cmd(exe, "test-game off");
-                Ok(Cmd(exe, "test-notes").Contains("Controller battery very low: 8 %"), "...and is shown after the game");
+                Ok(Cmd(exe, "test-notes").Contains("Controller battery very low: 8%"), "...and is shown after the game");
                 Cmd(exe, "test-bt-switch off"); st = J(Cmd(exe, "status"));
                 Ok(!(bool)st["bluetooth"] && ((System.Collections.ArrayList)st["devices"]).Count == 3, "the Bluetooth switch off: only the Logitech gear");
                 Cmd(exe, "test-bt-switch on"); st = J(Cmd(exe, "status"));

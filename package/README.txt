@@ -17,7 +17,7 @@ WHAT IT DOES
   documented by the open-source HeadsetControl project. It can't tell whether the headset itself
   is switched on; the A50 X isn't supported.
 - Wired keyboard (G713): present and wired.
-- Alerts: low battery at 20 % and 10 % (configurable, once per discharge), charging started,
+- Alerts: low battery at 20% and 10% (configurable, once per discharge), charging started,
   fully charged, switched to wired / wireless (off by default).
 - While you game, you choose what each alert does: wait until you're done, a quiet line in
   Hallow Overlay, Gear's own pop-up on another monitor (it never takes focus from the game), or
@@ -40,6 +40,9 @@ GOOD TO KNOW
 - Not supported: other brands' 2.4 GHz dongles (Razer, SteelSeries, Corsair...), the A50 Gen 4
   and the A50 X.
 
+WHAT'S NEW IN 1.3.2
+- Percentages read 45% instead of 45 %.
+
 WHAT'S NEW IN 1.3.1
 - Your mouse shows up even when Hallow Gear starts during a game. Before, a mouse Gear hadn't
   read yet had no card until it happened to send a battery report by itself. Now Gear asks the
@@ -49,7 +52,7 @@ WHAT'S NEW IN 1.3.1
   only listens again. Settings > While I'm gaming > Ask the mouse for its battery: once when
   Gear starts (default), every 5 min, or never.
 - Gear remembers your gear between restarts (devices.json in its data folder) and shows every
-  device straight away as "last known: 66 % - 12 min ago" until fresh data arrives.
+  device straight away as "last known: 66% - 12 min ago" until fresh data arrives.
 
 WHAT'S NEW IN 1.3
 - Settings > While I'm gaming: for each kind of alert (low, very low, charging, fully charged,

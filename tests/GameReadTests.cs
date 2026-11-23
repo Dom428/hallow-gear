@@ -65,7 +65,7 @@ namespace HallowGear.Tests
             con = Hidpp.FromConnection(B("10 02 41 10 41 8E 40")); Ok(con != null && con.Kind == "keyboard" && !con.LinkUp, "0x41 with flag 0x40: link lost, kind keyboard");
             Ok(Hidpp.FromConnection(B("11 01 41 10 02 9D 40")) == null && Hidpp.FromConnection(B("10 FF 41 10 02 9D 40")) == null, "only short 0x41 reports for slots 1-6");
             var u = Hidpp.Unified(B("00 04 00 00"), true);
-            Ok(u.Percent == 60 && u.Estimated && Hidpp.Unified(B("00 01 00 00"), true).Percent == 0, "0x1004 getStatus 0 % with level 'good' = no percentage reported (about 60 %), not an empty battery; 0 % 'critical' stays 0");
+            Ok(u.Percent == 60 && u.Estimated && Hidpp.Unified(B("00 01 00 00"), true).Percent == 0, "0x1004 getStatus 0% with level 'good' = no percentage reported (about 60%), not an empty battery; 0% 'critical' stays 0");
         }
 
         // a fake LIGHTSPEED receiver: answers 0xB5 for its paired slots (or never, when tells = false), and HID++ 2.0 for each device
@@ -117,11 +117,11 @@ namespace HallowGear.Tests
             list = src.Read(false, false, false, true); m = list.FirstOrDefault(x => x.Kind == "mouse");
             var g = longPort.Written.Skip(lb).Concat(shortPort.Written.Skip(sb)).ToList();
             Ok(m != null && m.Battery == 66 && !m.Waiting && !m.Paused && m.Updated.HasValue && g.Count == 2 && g[0][1] == 1 && What(g[0]) == "ifeat0" && g[0][4] == 0x10 && g[0][5] == 0x04 && What(g[1]) == "f5.1",
-                "the gentle read at start: 2 short messages to the mouse (getFeature 0x1004, getStatus) -> 66 %: " + string.Join(" | ", g.Select(x => Hex(x, 6))));
+                "the gentle read at start: 2 short messages to the mouse (getFeature 0x1004, getStatus) -> 66%: " + string.Join(" | ", g.Select(x => Hex(x, 6))));
             before = sent(); src.Read(false, false, false, true); src.Read(false, false, false, true); var again = src.Read(false, false, false, false);
-            Ok(sent() == before && again.Single(x => x.Kind == "mouse").Battery == 66 && again.Single(x => x.Kind == "mouse").Paused, "...and only once: asking 'gentle' again this session sends nothing; the card keeps 66 % (paused)");
+            Ok(sent() == before && again.Single(x => x.Kind == "mouse").Battery == 66 && again.Single(x => x.Kind == "mouse").Paused, "...and only once: asking 'gentle' again this session sends nothing; the card keeps 66% (paused)");
             Ok(st.KnownSlotBattery.ContainsKey("C54D:1") && st.KnownSlotBattery["C54D:1"].StartsWith("1004 5 1"), "its battery feature is remembered for listening (C54D:1 -> " + (st.KnownSlotBattery.ContainsKey("C54D:1") ? st.KnownSlotBattery["C54D:1"] : "-") + ")");
-            heard.Clear();   // (the answer to its own getStatus was heard too - the same 66 %)
+            heard.Clear();   // (the answer to its own getStatus was heard too - the same 66%)
             longPort.Push(B("11 01 05 00 3B 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00"));
             Ok(heard.Count == 1 && heard[0] == "mouse:pro x 2 59", "the mouse's own battery report is heard: " + string.Join(", ", heard));
             // 3) a device the receiver announces by itself (0x41): Found, and a card on the next listing - nothing asked
@@ -137,7 +137,7 @@ namespace HallowGear.Tests
             int devBefore = longPort.Written.Concat(shortPort.Written).Count(w => What(w) != "rx"); var cold = src2.Read(false, false, true, false);
             var deviceMsgs = longPort.Written.Concat(shortPort.Written).Count(w => What(w) != "rx") - devBefore;
             longPort.Push(B("11 01 05 00 3A 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00"));
-            Ok(cold.Any(x => x.Kind == "mouse" && x.Waiting) && deviceMsgs == 0 && heard2.Count == 1 && heard2[0].EndsWith(" 58"), "a later session with 'never': the card is there, nothing is sent to the mouse, and its report is heard with the remembered battery feature (58 %)");
+            Ok(cold.Any(x => x.Kind == "mouse" && x.Waiting) && deviceMsgs == 0 && heard2.Count == 1 && heard2[0].EndsWith(" 58"), "a later session with 'never': the card is there, nothing is sent to the mouse, and its report is heard with the remembered battery feature (58%)");
             src2.Dispose();
             // 5) a receiver that doesn't answer register reads: the gentle read finds the mouse itself (empty slots are answered by the receiver)
             var lp = new FakePort { Answer = RxAnswers(devs, kinds, false) }; var sp = new FakePort(); sp.Answer = q => { var a = lp.Answer(q); if (a != null) lp.Push(a); return null; };
@@ -147,7 +147,7 @@ namespace HallowGear.Tests
             var l3 = src3.Read(false, false, false, true); var m3 = l3.FirstOrDefault(x => x.Kind == "mouse");
             var dm = lp.Written.Concat(sp.Written).Where(w => What(w) != "rx").ToList();
             Ok(none.Count == 0 && m3 != null && m3.Battery == 66 && m3.Name == "Logitech mouse" && m3.Provisional && dm.Count(w => w[1] == 1) == 2 && dm.All(w => What(w) == "ifeat0" || (w[1] == 1 && What(w) == "f5.1")),
-                "a receiver that doesn't tell its pairings: the gentle read looks in slots 1-6 - 2 messages to the mouse, 1 'are you there' per empty slot (answered by the receiver) -> 'Logitech mouse' 66 %");
+                "a receiver that doesn't tell its pairings: the gentle read looks in slots 1-6 - 2 messages to the mouse, 1 'are you there' per empty slot (answered by the receiver) -> 'Logitech mouse' 66%");
             src3.Dispose();
             // 6) out of a game nothing changed: the full read names the mouse itself and the receiver's provisional name goes
             var src4 = new LogiSource(st3) { Enumerator = () => infos, Opener = i => i.InLen == 20 ? longPort : shortPort, ReceiverReplyMs = 200, DeviceReplyMs = 200 };
@@ -212,13 +212,13 @@ namespace HallowGear.Tests
             var kb = new GearDevice { Key = "keyboard:g713 keyboard", Kind = "keyboard", Name = "G713 Keyboard", Wired = true, HasBattery = false, Via = "USB cable" };
             var bt = new GearDevice { Key = "bt:0a1b2c3d4e01", Kind = "earbuds", Name = "Buds", Bluetooth = true, Battery = 80 };
             var wait = new GearDevice { Key = "mouse:g502", Kind = "mouse", Name = "G502", Waiting = true, Paused = true };
-            Ok(RememberedGear.Update(mem, new[] { mouse, kb, bt, wait }, now) && mem.Count == 2 && mem.Any(r => r.Key == "mouse:pro x 2" && r.Battery == 66 && r.State == "on-battery" && r.SlotKey == "C54D:1"), "remembered: the mouse (66 %, on battery, slot C54D:1) and the keyboard - not Bluetooth devices (they have their own memory) nor a card still waiting");
+            Ok(RememberedGear.Update(mem, new[] { mouse, kb, bt, wait }, now) && mem.Count == 2 && mem.Any(r => r.Key == "mouse:pro x 2" && r.Battery == 66 && r.State == "on-battery" && r.SlotKey == "C54D:1"), "remembered: the mouse (66%, on battery, slot C54D:1) and the keyboard - not Bluetooth devices (they have their own memory) nor a card still waiting");
             Ok(!RememberedGear.Update(mem, new[] { mouse, kb }, now.AddMinutes(1)), "nothing changed -> nothing to save");
             var json = RememberedGear.ToJson(mem); var back = RememberedGear.FromJson(json);
             Ok(back.Count == 2 && back.Any(r => r.Name == "PRO X 2" && r.Battery == 66 && r.Updated != null) && !json.Contains("0a1b2c3d4e01"), "devices.json: written and read back (" + json.Length + " chars), no Bluetooth address in it");
             var card = RememberedGear.ToCard(back.First(r => r.Kind == "mouse"));
-            Ok(card.LastKnown && card.Paused && card.Battery == 66 && card.Connected && card.State == "on-battery" && card.SlotKey == "C54D:1", "on start a remembered device is a card at once: last known, 66 %, on battery");
-            Ok(RememberedGear.LastKnownText(card, now) == "last known: 66 % \u00B7 12 min ago", "the card says: " + RememberedGear.LastKnownText(card, now));
+            Ok(card.LastKnown && card.Paused && card.Battery == 66 && card.Connected && card.State == "on-battery" && card.SlotKey == "C54D:1", "on start a remembered device is a card at once: last known, 66%, on battery");
+            Ok(RememberedGear.LastKnownText(card, now) == "last known: 66% \u00B7 12 min ago", "the card says: " + RememberedGear.LastKnownText(card, now));
             var kcard = RememberedGear.ToCard(back.First(r => r.Kind == "keyboard")); Ok(!kcard.HasBattery && RememberedGear.LastKnownText(kcard, now).StartsWith("last known: wired"), "a keyboard without battery: 'last known: wired...'");
             Ok(RememberedGear.FromJson("{broken").Count == 0 && RememberedGear.FromJson("[{\"Key\":\"bt:aa\",\"Name\":\"x\"},{\"Key\":\"mouse:m\",\"Name\":\"M\",\"Battery\":250}]").Single().Battery == 100, "a broken file reads as empty; Bluetooth keys are dropped; values are clamped");
             // the receiver named it ("provisional"); then the mouse names itself on the same slot: the provisional memory goes
@@ -289,14 +289,14 @@ namespace HallowGear.Tests
                 var devs = st == null ? new List<Dictionary<string, object>>() : ((System.Collections.ArrayList)st["devices"]).Cast<Dictionary<string, object>>().ToList();
                 var g502 = devs.FirstOrDefault(x => (string)x["name"] == "G502 X PLUS");
                 Ok(st != null && (string)st["game"] == "THE FINALS" && (string)st["gameAsk"] == "start", "a test copy started during a game (THE FINALS): status says game + gameAsk 'start'");
-                Ok(g502 != null && (bool)g502["lastKnown"] && (int)g502["battery"] == 66 && (bool)g502["paused"], "a device remembered from the last session is shown at once: last known 66 %");
+                Ok(g502 != null && (bool)g502["lastKnown"] && (int)g502["battery"] == 66 && (bool)g502["paused"], "a device remembered from the last session is shown at once: last known 66%");
                 Ok(asks != null && (int)asks["gentle"] == 1 && (int)asks["mouse"] == 0, "the start-up read happened once (gentle 1, full mouse reads 0)");
                 Thread.Sleep(1500); Cmd(exe, "test-game THE FINALS"); Thread.Sleep(500); asks = J(Cmd(exe, "test-asks"));
                 Ok(asks != null && (int)asks["gentle"] == 1 && (int)asks["mouse"] == 0, "...and not again while the game runs (gentle still 1)");
                 var notes = Cmd(exe, "test-notes"); Ok(notes == "ok []", "no notification from remembered values: " + notes);
                 Ok(Cmd(exe, "quit") == "ok" && app.WaitForExit(10000), "quit");
                 var mem = RememberedGear.FromJson(File.ReadAllText(Path.Combine(Dir, "devices.json")));
-                Ok(mem.Any(r => r.Name == "PRO X SUPERLIGHT 2" && r.Battery == 64) && mem.Any(r => r.Name == "G502 X PLUS" && r.Battery == 66) && mem.Any(r => r.Name == "ASTRO A50"), "devices.json after quit: the mouse read now (64 %), the remembered G502 (66 %), the headset - " + mem.Count + " devices");
+                Ok(mem.Any(r => r.Name == "PRO X SUPERLIGHT 2" && r.Battery == 64) && mem.Any(r => r.Name == "G502 X PLUS" && r.Battery == 66) && mem.Any(r => r.Name == "ASTRO A50"), "devices.json after quit: the mouse read now (64%), the remembered G502 (66%), the headset - " + mem.Count + " devices");
                 // again, with "never"
                 File.WriteAllText(Path.Combine(Dir, "settings.json"), "{\"GameAsk\":\"never\"}");
                 app = StartCopy(exe);
@@ -304,7 +304,7 @@ namespace HallowGear.Tests
                 devs = st == null ? new List<Dictionary<string, object>>() : ((System.Collections.ArrayList)st["devices"]).Cast<Dictionary<string, object>>().ToList();
                 var m = devs.FirstOrDefault(x => (string)x["name"] == "PRO X SUPERLIGHT 2");
                 Ok(asks != null && (int)asks["gentle"] == 0 && (int)asks["mouse"] == 0 && (string)st["gameAsk"] == "never", "'never': started during a game, nothing is asked of the mouse at all (gentle 0)");
-                Ok(m != null && (int)m["battery"] == 64, "...and the mouse is still on screen with what was remembered (64 %)");
+                Ok(m != null && (int)m["battery"] == 64, "...and the mouse is still on screen with what was remembered (64%)");
                 Ok(Cmd(exe, "quit") == "ok" && app.WaitForExit(10000), "quit");
             }
             finally { if (!app.HasExited) app.Kill(); }
