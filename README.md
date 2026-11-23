@@ -7,7 +7,8 @@ headset, a Logitech keyboard, and (new in 1.1) Bluetooth earbuds, headsets and c
 full, on battery, wired or wireless, asleep or not connected, when it was last read or seen, and a 24-hour sparkline. It warns you
 when a battery gets low (once per discharge), when charging starts and when it's full. While you game, **you choose** what each alert
 does: wait until you're done, a quiet line in Hallow Overlay, Gear's own small pop-up **on another monitor** that never takes focus
-from the game, or a Windows notification anyway - with its own sound settings for in and out of games (new in 1.3). It **only
+from the game, or a Windows notification anyway - with its own sound settings for in and out of games (new in 1.3). Started in the
+middle of a game, it still shows every paired device at once and remembers your gear between restarts (1.3.1). It **only
 reads**: it can't change a single setting on your gear. Light and dark mode. Its notifications show **the device's own icon** - a
 mouse, a headset, earbuds, a controller - in red when the battery is low and in green when it's charging or full.
 
@@ -63,11 +64,15 @@ battery to read.
 - Every message Hallow Gear can send is on a **fixed allow-list in the code** (`src/Hidpp.cs`, `src/A50.cs`):
   HID++ IRoot getFeature / getProtocolVersion (ping), Device Name getDeviceNameCount / getDeviceName / getDeviceType, Battery
   Status getBatteryLevelStatus / getBatteryCapability, Battery Voltage getBatteryInfo, Unified Battery getCapabilities / getStatus -
-  and the A50's battery GET. That's all.
-- Anything else - DPI, report rate, lighting, onboard profiles, pairing, receiver registers (HID++ 1.0 sub-ids 0x80-0x8F), host
+  and the A50's battery GET. **1.3.1** adds one HID++ 1.0 *receiver* read (`SafeReport.ForReceiver`): `GET_LONG_REGISTER` of
+  register 0xB5 (receiver info), sub-pages 0x20-0x25 (pairing info of slot 1-6: kind, wireless id) and 0x40-0x45 (the name the
+  receiver keeps for slot 1-6), as documented by Solaar. The receiver answers it itself; nothing goes over the air. That's all.
+- Anything else - DPI, report rate, lighting, onboard profiles, pairing, receiver register writes (HID++ 1.0 `SET_REGISTER` 0x80 /
+  `SET_LONG_REGISTER` 0x82: the pairing lock 0xB2, notification flags...) or any other receiver register or page, host
   switching, firmware, any headset SET - **can't even be built**: the only buffer that can be written to a device is a `SafeReport`,
-  and only the two allow-listed builders can make one. The tests check every one of the 65,536 x 16 HID++ feature / function pairs
-  and all 256 A50 commands, and scan the compiled code to prove `WriteFile` is called from one place only and that `HidD_SetFeature`
+  and only the three allow-listed builders can make one. The tests check every one of the 65,536 x 16 HID++ feature / function pairs,
+  every HID++ 1.0 sub id x register (only the 12 reads of 0xB5 pass), and all 256 A50 commands, check that each builder is called from
+  one place only (`HidppDevice.Call`, `HidppReceiver.Read`, the A50 reader), and scan the compiled code to prove `WriteFile` is called from one place only and that `HidD_SetFeature`
   / `HidD_SetOutputReport` aren't used at all.
 - **Bluetooth (1.1) writes nothing at all.** Device properties are read with SetupAPI's *get* functions only
   (`SetupDiGetClassDevs`, `SetupDiEnumDeviceInfo`, `SetupDiGetDeviceInstanceId`, `SetupDiGetDeviceProperty`); the only WinRT calls are
@@ -88,9 +93,17 @@ G HUB's local websocket (undocumented) - it doesn't need to.
 
 - Every **60 s** on mains power (1, 2 or 5 min in Settings), at most every **5 min on battery** power, and when gear is **plugged in
   or out** (device arrival / removal). Below Normal priority.
-- **While a game runs** (DeltaForceClient-Win64-Shipping.exe, Discovery-d.exe, or what Hallow Hub says you're playing): nothing is
-  sent to the mouse or the receiver - it **only listens**, so it can't add input latency. The A50's base station (a separate USB
-  device) is read at most every 2 minutes. Settings can let it ask the mouse every 2 minutes too (off by default).
+- **While a game runs** (DeltaForceClient-Win64-Shipping.exe, Discovery-d.exe, or what Hallow Hub says you're playing): it **listens** to
+  the battery reports the mouse sends by itself (and G HUB's answers). **1.3.1:** if Gear *starts* during a game it asks the
+  receiver what is paired (receiver-only register reads, once) so every paired device gets a card at once - "PRO X 2 · waiting for
+  its battery report (game running)" - and asks each paired device **once** for its battery: 1-2 short messages (getFeature
+  Unified Battery, getStatus), nothing else. Settings > While I'm gaming > **Ask the mouse for its battery**: *once when Gear
+  starts* (default) / *every 5 min* / *never*. A Gear that was already running when the game started asks the mouse nothing during
+  it. The A50's base station (a separate USB device) is read at most every 2 minutes.
+- **Remembered gear (1.3.1):** `%APPDATA%\HallowGear\devices.json` keeps each Logitech / A50 device's kind, name, last battery,
+  last state and last seen. After a restart every device shows at once as **"last known: 66 % · 12 min ago"** until fresh data
+  arrives (remembered values never raise an alert). A receiver slot's battery feature is remembered too - only to *listen* to its
+  reports in a later session, never to ask with it.
 - **Bluetooth devices**: at most every **5 minutes** (and on Refresh), never during a game - then only the battery notifications a
   device sends by itself are heard. Settings > **Bluetooth devices** switches it all off (on by default), and each device can be
   **hidden** (no card, not in status.json, so not in Overlay either, no alerts) or have its **alerts switched off**.
@@ -142,7 +155,7 @@ G HUB's local websocket (undocumented) - it doesn't need to.
 
 ![Every device icon and state, dark and light](docs/device-icons.png)
 
-![While you play: the mouse charging on its cable, the headset at 9 % (made-up data)](docs/devices-game.png)
+![While you play: the mouse waiting for its battery report (last known 66 %), the headset at 9 % (made-up data)](docs/devices-game.png)
 
 ## Hallow family
 
@@ -161,6 +174,8 @@ G HUB's local websocket (undocumented) - it doesn't need to.
   ```
   1.1 only **added** fields (`bluetooth`, `lastSeen`, `alerts` per device; `bluetooth`, `hiddenDevices` at the top) - nothing was
   renamed or removed, and the tests run Hallow Overlay 1.22's own reader over it. Hidden Bluetooth devices aren't listed.
+  1.3.1 adds `lastKnown` (the values are remembered from earlier, not fresh) and `waiting` (paired, nothing heard yet during a
+  game) per device and `gameAsk` (`start`, `5min`, `never`) at the top.
   `kind` = `mouse`, `headset`, `keyboard` (or another HID++ type), and for Bluetooth devices also `earbuds`, `controller`, `other`. `state` = `charging`, `full`, `on-battery`, `wired`, `wireless`
   (connected, battery not known yet), `asleep` or `not-connected`. `battery` is null for a keyboard or while unknown. `paused` = not
   asked during a game (the value is the last one read or heard). `polling` = `normal`, `on-battery` or `game`. `alert` =
@@ -190,10 +205,11 @@ battery state machine and alert rules (once per discharge, the game hold), histo
 a test copy with made-up gear. 1.1 adds a fake receiver with a keyboard and a second mouse on other slots plus a Logitech mouse on
 Bluetooth (through the real reading code), Bluetooth battery / property / address parsing, device kinds, Bluetooth alerts, hide /
 alerts-off / the switch, a scan of the compiled code for every WinRT and SetupAPI call, and Hallow Overlay 1.22's own status reader
-run over Gear's status.json. 1.2.2 adds the pipe `refresh` (started, refused when too soon, refused during a game with nothing read) and opaque Bluetooth ids (no address anywhere in status.json). 1.3 adds the game routes for every alert type x game / no game x one / two monitors x single-monitor fallback, per-device overrides, the monitor without the game on made-up layouts (side by side, left of the main one, three screens, the chosen one unplugged - never the game's), the pop-up's window styles on a hidden window that is never shown, sound choice -> toast XML, the chime's volume in its samples, no focus or volume API in the compiled code, the routes over the pipe and a `--snap` of the settings page and the pop-up. `tests\GearTests.exe unit` / `pipe` runs one suite. No test opens a real device, shows a window or plays a sound.
+run over Gear's status.json. 1.2.2 adds the pipe `refresh` (started, refused when too soon, refused during a game with nothing read) and opaque Bluetooth ids (no address anywhere in status.json). 1.3 adds the game routes for every alert type x game / no game x one / two monitors x single-monitor fallback, per-device overrides, the monitor without the game on made-up layouts (side by side, left of the main one, three screens, the chosen one unplugged - never the game's), the pop-up's window styles on a hidden window that is never shown, sound choice -> toast XML, the chime's volume in its samples, no focus or volume API in the compiled code, the routes over the pipe and a `--snap` of the settings page and the pop-up. 1.3.1 adds the receiver allow-list (every HID++ 1.0 sub id x register), pairing info / names / the 0x41 notification parsed from fixture bytes, a fake LIGHTSPEED receiver started "during a game" with nothing remembered (the mouse gets its card from receiver-only reads; the gentle read is exactly 2 messages and happens once; a receiver that doesn't tell its pairings), the schedule on a made-up clock (once in a game with "once", never with "never", every 5 min with "5min", 1.0's schedule out of games unchanged), devices.json, which code builds each kind of request, and a test copy started during a game over the pipe. `tests\GearTests.exe unit` / `pipe` runs one suite. No test opens a real device, shows a window or plays a sound.
 `HallowGear.exe --snap <folder>` renders every page off-screen with made-up gear, dark and light. `HallowGear.exe --probe <log>` is
 a one-shot read-only probe of the real gear and the paired Bluetooth devices (names and battery; nothing kept listening; it refuses
-while a game runs).
+while a game runs). `HallowGear.exe --probe-game <log>` (1.3.1) does exactly what a fresh Gear does when it starts during a game,
+with nothing remembered and nothing saved: the receiver's pairing info and one gentle battery read per paired device.
 
 ## Credits
 

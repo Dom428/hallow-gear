@@ -33,7 +33,12 @@ namespace HallowGear
         [DataMember] public bool AlertWired;                // switched to wired / wireless - off by default
         // reading
         [DataMember] public int PollSeconds = 60;           // on mains power; on battery it's at least 5 minutes
-        [DataMember] public bool ReadMouseInGames;          // off: while a game runs the mouse is only listened to, never asked
+        [DataMember] public bool ReadMouseInGames;          // 1.0-1.3 (kept so an old file reads the same): on = asked every 2 min in games -> GameAsk "5min"
+        // 1.3.1: while a game runs, ask the mouse (and other receiver devices) for its battery: "start" = once when Gear starts (1-2 short
+        // messages per device), "5min" = that gentle read every 5 min, "never" = only listen. Otherwise nothing is asked during a game.
+        [DataMember] public string GameAsk;
+        public static readonly string[] GameAsks = { "start", "5min", "never" };
+        [DataMember] public Dictionary<string, string> KnownSlotBattery;   // 1.3.1: "receiverPid:slot" -> "feature index soc wpid" - used only to LISTEN to its battery reports
         [DataMember] public List<string> ExtraGames;
         // remembered
         [DataMember] public Dictionary<string, string> KnownSlots;   // "receiverPid:slot" -> device name (to say "asleep" instead of nothing)
@@ -85,6 +90,8 @@ namespace HallowGear
             if (KnownSlots == null) KnownSlots = new Dictionary<string, string>();
             if (KnownGear == null) KnownGear = new Dictionary<string, string>();
             if (KnownSlotKinds == null) KnownSlotKinds = new Dictionary<string, string>();
+            if (KnownSlotBattery == null) KnownSlotBattery = new Dictionary<string, string>();
+            if (!GameAsks.Contains(GameAsk)) GameAsk = ReadMouseInGames ? "5min" : "start";   // 1.3.1
             if (BtHidden == null) BtHidden = new List<string>(); if (BtNoAlerts == null) BtNoAlerts = new List<string>();
             if (BtKnown == null) BtKnown = new Dictionary<string, string>();
             if (Look != "light" && Look != "dark") Look = "hallow";

@@ -34,10 +34,10 @@ namespace HallowGear.Tests
                 catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
                 try { IconTests(); ToastXmlTests(); ShortcutTests(); RouteTests(); }   // 1.2 (NotifyTests.cs)
                 catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
-                try { GamingTests(); }   // 1.3 (GamingTests.cs)
+                try { GamingTests(); GameReadTests(); }   // 1.3 (GamingTests.cs), 1.3.1 (GameReadTests.cs)
                 catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); }
             }
-            if (pipe) { try { Pipe(); } catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); } }
+            if (pipe) { try { Pipe(); } catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); } try { PipeStartInGame(); } catch (Exception e) { fail++; Console.WriteLine("FAIL exception: " + e); } }
             try { if (Directory.Exists(Dir)) Directory.Delete(Dir, true); } catch { }
             Console.WriteLine(pass + " passed, " + fail + " failed");
             return fail == 0 ? 0 : 1;
@@ -128,7 +128,7 @@ namespace HallowGear.Tests
             Ok(ctors.Length == 1 && ctors[0].IsPrivate, "SafeReport has one constructor, and it's private");
             var makers = typeof(Program).Assembly.GetTypes().SelectMany(x => x.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                 .Where(m => m.ReturnType == t && m.DeclaringType == t).Select(m => m.Name).OrderBy(x => x).ToList();
-            Ok(string.Join(",", makers) == "ForA50,ForHidpp", "only ForHidpp / ForA50 return a SafeReport: " + string.Join(",", makers));
+            Ok(string.Join(",", makers) == "ForA50,ForHidpp,ForReceiver", "only ForHidpp / ForA50 / (1.3.1) ForReceiver return a SafeReport: " + string.Join(",", makers));
             Ok(typeof(IReportPort).GetMethod("Write").GetParameters().Single().ParameterType == t, "a port's Write takes a SafeReport and nothing else");
         }
         // the only WriteFile call is HidPort.Write(SafeReport); HidD_SetFeature / SetOutputReport / SetConfiguration aren't even declared

@@ -2,8 +2,8 @@
 // third-party library. Devices are opened SHARED (read and write sharing), so Logitech G HUB keeps working next to it.
 //
 // READ-ONLY BY CONSTRUCTION: the only thing that can ever be written to a device is a SafeReport, and a SafeReport can only be made by
-// SafeReport.ForHidpp(...) / SafeReport.ForA50(...), which refuse every function that isn't on the read-only allow-lists in Hidpp.cs and
-// A50.cs. There is no other WriteFile call in Hallow Gear, and no HidD_SetFeature / HidD_SetOutputReport at all (the tests check both).
+// SafeReport.ForHidpp(...) / SafeReport.ForA50(...) / (1.3.1) SafeReport.ForReceiver(...), which refuse every function that isn't on the
+// read-only allow-lists in Hidpp.cs and A50.cs. There is no other WriteFile call in Hallow Gear, and no HidD_SetFeature / HidD_SetOutputReport at all (the tests check both).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -40,6 +40,17 @@ namespace HallowGear
             b[0] = longReport ? Hidpp.LongId : Hidpp.ShortId; b[1] = device; b[2] = featureIndex; b[3] = (byte)((function << 4) | swId);
             if (args != null) for (int i = 0; i < args.Length && 4 + i < b.Length; i++) b[4 + i] = args[i];
             return new SafeReport(b, string.Format("HID++ 0x{0:X4} fn{1} {2}", featureId, function, name));
+        }
+        // 1.3.1: HID++ 1.0 to the receiver itself (device index 0xFF), short report [0x10, 0xFF, sub id, register, args...]. Only the receiver
+        // reads on Hidpp.ReceiverReadName's list (GET_LONG_REGISTER 0xB5, pairing info / name pages); null = refused.
+        public static SafeReport ForReceiver(byte subId, byte register, params byte[] args)
+        {
+            var name = Hidpp.ReceiverReadName(subId, register, args);
+            if (name == null) return null;
+            var b = new byte[7];
+            b[0] = Hidpp.ShortId; b[1] = Hidpp.ReceiverIndex; b[2] = subId; b[3] = register;
+            for (int i = 0; i < args.Length && 4 + i < b.Length; i++) b[4 + i] = args[i];
+            return new SafeReport(b, string.Format("HID++ 1.0 receiver 0x{0:X2} reg 0x{1:X2} page 0x{2:X2} {3}", subId, register, args[0], name));
         }
         // ASTRO A50 (Gen 5) base station: [0x02, 0x0C, 3 + payload, 0x00, cmd, handle, payload...] padded to the output report size
         public static SafeReport ForA50(byte cmd, byte handle, int frameSize, params byte[] payload)

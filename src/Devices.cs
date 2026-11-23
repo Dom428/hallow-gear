@@ -15,6 +15,10 @@ namespace HallowGear
         public int? Battery; public bool Charging, Full, External, Wired, Connected = true, Asleep, HasBattery = true, Estimated, Paused;
         public DateTime? Updated;
         public bool Bluetooth; public DateTime? LastSeen;   // 1.1: a card from Windows' Bluetooth devices (not HID++); when it was last connected
+        // 1.3.1: LastKnown = the battery / state shown are remembered from earlier (devices.json), not fresh; Waiting = paired (the receiver says so)
+        // but nothing heard yet while a game runs; SlotKey = "receiverPid:slot"; Provisional = named by the receiver, not by the device itself yet
+        public bool LastKnown, Waiting, Provisional; public string SlotKey;
+        public const string WaitingText = "waiting for its battery report (game running)";
         public GearDevice Clone() { return (GearDevice)MemberwiseClone(); }
         public string State
         {
@@ -51,6 +55,7 @@ namespace HallowGear
             if (b == null) return;
             if (b.Percent.HasValue) Battery = b.Percent;
             Charging = b.Charging; Full = b.Full; External = b.External; Estimated = b.Estimated; Source = b.Source; Updated = now; HasBattery = true; Asleep = false; Connected = true;
+            LastKnown = false; Waiting = false;
             if (Bluetooth) LastSeen = now;
         }
     }
@@ -58,9 +63,11 @@ namespace HallowGear
     public interface IGearSource : IDisposable
     {
         // askMice: HID++ questions to mice / keyboards allowed now; askHeadset: the A50 battery GET allowed now; rescan: enumerate again
-        List<GearDevice> Read(bool askMice, bool askHeadset, bool rescan);
+        // 1.3.1 gentle: a game runs and the one gentle battery read is due (1-2 short messages per paired receiver device; nothing else asked)
+        List<GearDevice> Read(bool askMice, bool askHeadset, bool rescan, bool gentle = false);
         event Action<string, BatteryReading> Heard;   // a battery report heard without asking (device key, reading)
         event Action<string, bool> Link;              // a receiver said a device's link went up / down
+        event Action Found;                           // 1.3.1: a receiver announced a device it hadn't been asked about (0x41) - list again
         List<string> Log { get; }
     }
 
@@ -108,8 +115,10 @@ namespace HallowGear
     {
         public event Action<string, BatteryReading> Heard;
         public event Action<string, bool> Link;
+        public event Action Found;
         readonly List<string> log = new List<string>(); public List<string> Log { get { return log; } }
         readonly GearSettings s;
+        public int ReceiverReplyMs = 600, DeviceReplyMs = 1200;   // tests make these short
         List<HidInfo> infos; readonly Dictionary<string, Holder> holders = new Dictionary<string, Holder>();
         static readonly HashSet<ushort> ReceiverPids = new HashSet<ushort> { 0xC52B, 0xC52F, 0xC531, 0xC532, 0xC534, 0xC537, 0xC539, 0xC53A, 0xC53D, 0xC53F, 0xC541, 0xC545, 0xC547, 0xC548, 0xC54D };
         static readonly HashSet<ushort> Skip = new HashSet<ushort> { 0xC232 };   // G HUB's virtual keyboard
@@ -117,10 +126,16 @@ namespace HallowGear
         public Func<List<HidInfo>> Enumerator = () => HidNative.Enumerate(0x046D);
         public Func<HidInfo, IReportPort> Opener = i => HidPort.Open(i);
 
-        class Slot { public HidppDevice Dev; public string Name; public int? Type; public GearDevice Last; public bool Seen; }
+        class Slot
+        {
+            public HidppDevice Dev; public string Name; public int? Type; public GearDevice Last; public bool Seen;
+            public bool GentleDone;                                             // 1.3.1: the one gentle read of this session was made
+            public ushort ListenFeature; public byte ListenIndex; public bool ListenSoc = true;   // 1.3.1: remembered battery feature - only to LISTEN
+        }
         class Holder
         {
             public string Id; public ushort Pid; public IReportPort Long, Short; public bool Receiver, ScannedAll; public string Via; public Dictionary<int, Slot> Slots = new Dictionary<int, Slot>();
+            public Dictionary<int, PairingInfo> Paired = new Dictionary<int, PairingInfo>(); public bool PairingRead;   // 1.3.1: what the receiver says is paired
             public A50Reader A50; public IReportPort A50Port; public GearDevice A50Last;
             public void Close() { if (Long != null) Long.Dispose(); if (Short != null) Short.Dispose(); if (A50Port != null) A50Port.Dispose(); Long = Short = A50Port = null; }
         }
@@ -142,7 +157,7 @@ namespace HallowGear
             return "LIGHTSPEED receiver";
         }
 
-        public List<GearDevice> Read(bool askMice, bool askHeadset, bool rescan)
+        public List<GearDevice> Read(bool askMice, bool askHeadset, bool rescan, bool gentle = false)
         {
             var now = DateTime.Now;
             if (infos == null || rescan)
@@ -150,7 +165,7 @@ namespace HallowGear
                 infos = Enumerator() ?? new List<HidInfo>();
                 // close what isn't there any more
                 foreach (var k in holders.Keys.ToList()) if (!infos.Any(i => Group(i) == k)) { holders[k].Close(); holders.Remove(k); }
-                foreach (var h in holders.Values) h.ScannedAll = false;
+                foreach (var h in holders.Values) { h.ScannedAll = false; h.PairingRead = false; }
                 L("enumerated " + infos.Count + " Logitech HID collections");
             }
             var found = new List<GearDevice>();
@@ -162,7 +177,7 @@ namespace HallowGear
                     if (first.Pid == A50Proto.PidGen5) { var d = ReadA50(g.Key, g.ToList(), askHeadset, now); if (d != null) found.Add(d); continue; }
                     var hp = g.Where(IsHidpp).ToList();
                     bool receiver = ReceiverPids.Contains(first.Pid) || g.Any(i => (i.Product ?? "").IndexOf("receiver", StringComparison.OrdinalIgnoreCase) >= 0);
-                    if (receiver) { if (hp.Count > 0) found.AddRange(ReadReceiver(g.Key, first.Pid, ReceiverName(first.Pid, g.Select(i => i.Product).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p))), hp, askMice, now)); continue; }
+                    if (receiver) { if (hp.Count > 0) found.AddRange(ReadReceiver(g.Key, first.Pid, ReceiverName(first.Pid, g.Select(i => i.Product).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p))), hp, askMice, gentle && !askMice, now).ToList()); continue; }
                     var cd = ReadCorded(g.Key, g.ToList(), hp, askMice, now); if (cd != null) found.Add(cd);
                 }
                 catch (Exception e) { L("read " + first.Pid.ToString("X4") + " failed: " + e.Message); }
@@ -192,41 +207,112 @@ namespace HallowGear
             foreach (var kv in h.Slots.ToList())
             {
                 var sl = kv.Value; if (sl.Last == null || sl.Dev == null) continue;
-                var b = Hidpp.Passive(r, (byte)kv.Key, sl.Dev.BatteryFeature, sl.Dev.BatteryIndex, sl.Dev.SocSupported);
+                // 1.3.1: until the device's battery feature is found this session, a battery feature remembered from an earlier session is used - to listen only
+                bool remembered = sl.Dev.BatteryIndex == 0 && sl.ListenIndex != 0;
+                var b = Hidpp.Passive(r, (byte)kv.Key, remembered ? sl.ListenFeature : sl.Dev.BatteryFeature, remembered ? sl.ListenIndex : sl.Dev.BatteryIndex, remembered ? sl.ListenSoc : sl.Dev.SocSupported);
                 if (b != null) { var cb = Heard; if (cb != null) cb(sl.Last.Key, b); }
                 var up = Hidpp.LinkUp(r, (byte)kv.Key);
                 if (up.HasValue && h.Receiver) { var lk = Link; if (lk != null) lk(sl.Last.Key, up.Value); }
             }
+            // 1.3.1: the receiver announces a device (0x41) it wasn't asked about: remember it as paired and list again (nothing is asked)
+            var con = h.Receiver ? Hidpp.FromConnection(r) : null;
+            if (con != null && con.Wpid != 0)
+            {
+                bool isNew;
+                lock (h.Paired) { Slot have; isNew = !h.Paired.ContainsKey(con.Slot) && !(h.Slots.TryGetValue(con.Slot, out have) && have.Last != null); if (isNew) h.Paired[con.Slot] = con; }
+                if (isNew) { L("receiver: " + con); var f = Found; if (f != null) f(); }
+            }
         }
-        // a slot's kind: what the device said (getDeviceType), else what it said in an earlier session, else "mouse"
-        string KindOf(Slot sl, string slotKey)
+        // a slot's kind: what the device said (getDeviceType), else what the receiver says now (1.3.1), else what it said in an earlier session, else "mouse"
+        string KindOf(Slot sl, string slotKey, PairingInfo pi = null)
         {
             if (sl.Type.HasValue) return Hidpp.TypeName(sl.Type.Value);
+            if (pi != null && pi.Kind != null) return pi.Kind;
             string k; return s.KnownSlotKinds != null && s.KnownSlotKinds.TryGetValue(slotKey, out k) && !string.IsNullOrEmpty(k) ? k : "mouse";
         }
+        // 1.3.1: ask the RECEIVER (not the devices) what is paired in slots 1-6 - register 0xB5 reads it answers itself. Once per session / rescan.
+        void ReadPairing(Holder h)
+        {
+            h.PairingRead = true;
+            var rx = new HidppReceiver(h.Long, h.Short) { ReplyMs = ReceiverReplyMs };
+            int found = 0, errors = 0;
+            for (int n = 1; n <= 6; n++)
+            {
+                var pi = rx.Paired(n);
+                if (pi != null) { lock (h.Paired) h.Paired[n] = pi; found++; L(h.Via + " " + pi); }
+                else if (rx.LastError < 0) { errors++; if (n == 1) break; }   // no answer at all: the receiver doesn't do this - don't wait 6 times
+            }
+            L(h.Via + ": pairing info read from the receiver - " + found + " paired" + (errors > 0 ? " (no answer to " + errors + ")" : "") + " - " + rx.Sent.Count + " register reads (0xB5) answered by the receiver itself");
+        }
+        // 1.3.1: remembers a slot's battery feature (to listen to it in a later session, never to ask with it)
+        void RememberBattery(string slotKey, HidppDevice dev, ushort wpid)
+        {
+            if (dev.BatteryIndex == 0) return;
+            var v = dev.BatteryFeature.ToString("X4") + " " + dev.BatteryIndex + " " + (dev.SocSupported ? 1 : 0) + " " + wpid.ToString("X4");
+            string old; if (s.KnownSlotBattery.TryGetValue(slotKey, out old) && old == v) return;
+            s.KnownSlotBattery[slotKey] = v; s.Save();
+        }
+        void LoadListen(Slot sl, string slotKey, PairingInfo pi)
+        {
+            string v; if (sl.ListenIndex != 0 || !s.KnownSlotBattery.TryGetValue(slotKey, out v)) return;
+            var p = v.Split(' '); ushort f, w = 0; byte i;
+            if (p.Length < 3 || !ushort.TryParse(p[0], System.Globalization.NumberStyles.HexNumber, null, out f) || !byte.TryParse(p[1], out i) || i == 0 || i >= 0x80) return;
+            if (p.Length > 3) ushort.TryParse(p[3], System.Globalization.NumberStyles.HexNumber, null, out w);
+            if (pi != null && w != 0 && pi.Wpid != w) return;   // another device is paired there now
+            sl.ListenFeature = f; sl.ListenIndex = i; sl.ListenSoc = p[2] == "1";
+        }
 
-        IEnumerable<GearDevice> ReadReceiver(string id, ushort pid, string via, List<HidInfo> hp, bool ask, DateTime now)
+        IEnumerable<GearDevice> ReadReceiver(string id, ushort pid, string via, List<HidInfo> hp, bool ask, bool gentle, DateTime now)
         {
             var h = Get(id, pid, hp); h.Receiver = true; h.Via = via;
             if (h.Long == null && h.Short == null) yield break;
-            var slots = !h.ScannedAll && ask ? Enumerable.Range(1, 6).ToList() : h.Slots.Keys.Concat(KnownSlots(pid)).Distinct().OrderBy(x => x).ToList();
+            // 1.3.1: during a game, learn what is paired from the receiver itself (once), so a device never read before still gets its card
+            if (!ask && !h.PairingRead) ReadPairing(h);
+            List<int> paired; lock (h.Paired) paired = h.Paired.Keys.ToList();
+            var slots = !h.ScannedAll && ask ? Enumerable.Range(1, 6).ToList() : h.Slots.Keys.Concat(KnownSlots(pid)).Concat(paired).Distinct().OrderBy(x => x).ToList();
+            // 1.3.1: a receiver that doesn't tell its pairings and nothing known: the gentle read looks in slots 1-6 (the receiver itself answers
+            // "empty" for an empty slot, so only a paired device gets the 1-2 messages)
+            bool gentleScan = !ask && gentle && slots.Count == 0;
+            if (gentleScan) slots = Enumerable.Range(1, 6).ToList();
             foreach (var n in slots)
             {
-                Slot sl; if (!h.Slots.TryGetValue(n, out sl)) h.Slots[n] = sl = new Slot { Dev = new HidppDevice(h.Long, h.Short, (byte)n) };
+                Slot sl; if (!h.Slots.TryGetValue(n, out sl)) h.Slots[n] = sl = new Slot { Dev = new HidppDevice(h.Long, h.Short, (byte)n) { ReplyMs = DeviceReplyMs } };
                 var slotKey = pid.ToString("X4") + ":" + n;
                 string known; s.KnownSlots.TryGetValue(slotKey, out known);
+                PairingInfo pi; lock (h.Paired) h.Paired.TryGetValue(n, out pi);
                 if (!ask)
-                {   // a game is running: what we knew, marked paused
-                    if (sl.Last != null) { var c = sl.Last.Clone(); c.Paused = true; yield return c; }
-                    else if (known != null) { var k = KindOf(sl, slotKey); yield return new GearDevice { Key = GearMerge.KeyFor(k, known), Kind = k, Name = known, Via = via, Paused = true, Note = "Not read yet - waiting for the game to close." }; }
+                {   // a game is running: nothing is asked - except (1.3.1) the one gentle battery read when it's due, for a device the receiver says is paired
+                    LoadListen(sl, slotKey, pi);
+                    var k = KindOf(sl, slotKey, pi);
+                    var name = sl.Name ?? known ?? (pi != null ? pi.Name : null) ?? ("Logitech " + k);
+                    if (gentle && !sl.GentleDone && (pi != null || known != null || sl.Last != null || gentleScan))
+                    {
+                        sl.GentleDone = true;
+                        var b = sl.Dev.GentleBattery(); int err = sl.Dev.LastError;
+                        if (b == null && gentleScan && (err == 8 || err < 0)) { h.Slots.Remove(n); continue; }   // empty (or silent) slot
+                        L(string.Format("{0} slot {1}: gentle read in a game ({2}) -> {3}", via, n, string.Join(", ", sl.Dev.Sent.Skip(Math.Max(0, sl.Dev.Sent.Count - 2)).Select(x => x.Substring(x.LastIndexOf(' ') + 1))), b != null ? b.ToString() : Hidpp.ErrorName(err)));
+                        if (b != null)
+                        {
+                            var d = sl.Last != null ? sl.Last.Clone() : new GearDevice { Key = GearMerge.KeyFor(k, name), Kind = k, Name = name, Via = via, Provisional = sl.Name == null && known == null };
+                            d.SlotKey = slotKey; d.Note = null; d.Paused = false; d.Apply(b, now);
+                            sl.Last = d; RememberBattery(slotKey, sl.Dev, pi != null ? pi.Wpid : (ushort)0);
+                            yield return d; continue;
+                        }
+                        if (err == 8 || err == 9) { var off = Offline(sl.Last, k, name, via); off.SlotKey = slotKey; off.Provisional = sl.Name == null && known == null; sl.Last = off; yield return off; continue; }
+                    }
+                    if (sl.Last != null) { var c = sl.Last.Clone(); c.Paused = true; yield return c; continue; }
+                    if (known == null && pi == null) continue;
+                    var w = new GearDevice { Key = GearMerge.KeyFor(k, name), Kind = k, Name = name, Via = via, Paused = true, Waiting = true, SlotKey = slotKey, Provisional = known == null };
+                    sl.Last = w;   // so its battery reports are heard (and the receiver's link notifications) - with the remembered battery feature, if any
+                    yield return w.Clone();
                     continue;
                 }
-                int ver = sl.Dev.Ping(); int err = sl.Dev.LastError;
+                int ver = sl.Dev.Ping(); int err2 = sl.Dev.LastError;
                 if (ver >= 2)
                 {
-                    if (sl.Name == null) { sl.Name = sl.Dev.Name() ?? known ?? "Logitech device"; sl.Type = sl.Dev.DeviceType(); }
-                    var kind = KindOf(sl, slotKey);
-                    var d = new GearDevice { Key = GearMerge.KeyFor(kind, sl.Name), Kind = kind, Name = sl.Name, Via = via };
+                    if (sl.Name == null) { sl.Name = sl.Dev.Name() ?? known ?? (pi != null ? pi.Name : null) ?? "Logitech device"; sl.Type = sl.Dev.DeviceType(); }
+                    var kind = KindOf(sl, slotKey, pi);
+                    var d = new GearDevice { Key = GearMerge.KeyFor(kind, sl.Name), Kind = kind, Name = sl.Name, Via = via, SlotKey = slotKey };
                     var b = sl.Dev.Battery();
                     if (b != null) d.Apply(b, now);
                     else if (sl.Dev.BatteryFeature == 0 && sl.Dev.LastError >= 0) { d.HasBattery = false; d.Note = "It doesn't report a battery."; }
@@ -236,15 +322,17 @@ namespace HallowGear
                     if (!s.KnownSlots.ContainsKey(slotKey) || s.KnownSlots[slotKey] != sl.Name) { s.KnownSlots[slotKey] = sl.Name; save = true; }
                     if (sl.Type.HasValue && (!s.KnownSlotKinds.ContainsKey(slotKey) || s.KnownSlotKinds[slotKey] != kind)) { s.KnownSlotKinds[slotKey] = kind; save = true; }
                     if (save) s.Save();
+                    RememberBattery(slotKey, sl.Dev, pi != null ? pi.Wpid : (ushort)0);
                     L(string.Format("{0} slot {1}: HID++ {2}, {3} '{4}', battery {5}", via, n, ver, kind, sl.Name, b == null ? "none" : b.ToString()));
                     yield return d;
                 }
                 else
                 {
-                    if (err == 8 && known == null) { h.Slots.Remove(n); continue; }   // an empty slot
-                    var name = sl.Name ?? known; if (name == null) { if (err != 8) L("slot " + n + ": no answer (" + Hidpp.ErrorName(err) + ")"); h.Slots.Remove(n); continue; }
-                    var d = Offline(sl.Last, KindOf(sl, slotKey), name, via);
-                    sl.Last = d; L("slot " + n + ": '" + name + "' " + Hidpp.ErrorName(err));
+                    if (err2 == 8 && known == null && pi == null) { h.Slots.Remove(n); continue; }   // an empty slot
+                    var name = sl.Name ?? known ?? (pi != null ? pi.Name : null);
+                    if (name == null) { if (err2 != 8) L("slot " + n + ": no answer (" + Hidpp.ErrorName(err2) + ")"); h.Slots.Remove(n); continue; }
+                    var d = Offline(sl.Last, KindOf(sl, slotKey, pi), name, via); d.SlotKey = slotKey; d.Provisional = sl.Name == null && known == null;
+                    sl.Last = d; L("slot " + n + ": '" + name + "' " + Hidpp.ErrorName(err2));
                     yield return d;
                 }
             }
@@ -338,9 +426,10 @@ namespace HallowGear
     {
         public event Action<string, BatteryReading> Heard;
         public event Action<string, bool> Link;
+        public event Action Found;
         public List<string> Log { get { return new List<string>(); } }
         public List<GearDevice> Devices = new List<GearDevice>();
-        public int Reads, MouseAsks, HeadsetAsks;
+        public int Reads, MouseAsks, HeadsetAsks, GentleAsks;
         public FakeSource() { Reset(); }
         public void Reset()
         {
@@ -350,12 +439,13 @@ namespace HallowGear
                 new GearDevice { Key = "headset:astro a50", Kind = "headset", Name = "ASTRO A50", Via = "base station (USB)", Battery = 100, Full = true, External = true, Updated = t, Source = "ASTRO A50 base station (battery GET 0x06)" },
                 new GearDevice { Key = "keyboard:g713", Kind = "keyboard", Name = "G713", Via = "USB cable", Wired = true, HasBattery = false, Note = "A wired keyboard - no battery." } };
         }
-        public List<GearDevice> Read(bool askMice, bool askHeadset, bool rescan)
+        public List<GearDevice> Read(bool askMice, bool askHeadset, bool rescan, bool gentle = false)
         {
-            Reads++; if (askMice) MouseAsks++; if (askHeadset) HeadsetAsks++;
-            return Devices.Select(d => { var c = d.Clone(); if (!askMice && c.Kind != "headset" && c.HasBattery) c.Paused = true; return c; }).ToList();
+            Reads++; if (askMice) MouseAsks++; if (askHeadset) HeadsetAsks++; if (gentle && !askMice) GentleAsks++;
+            return Devices.Select(d => { var c = d.Clone(); if (!askMice && !(gentle && c.Kind == "mouse") && c.Kind != "headset" && c.HasBattery) c.Paused = true; return c; }).ToList();
         }
         public void Hear(string key, BatteryReading b) { var h = Heard; if (h != null) h(key, b); }
+        public void SayFound() { var f = Found; if (f != null) f(); }
         public void SayLink(string key, bool up) { var h = Link; if (h != null) h(key, up); }
         public void Dispose() { }
     }

@@ -61,7 +61,7 @@ namespace HallowGear
             }
             var foot = new StackPanel { Margin = new Thickness(16, 0, 16, 14) };
             updateBtn = Ui.Btn("Update", () => c.InstallUpdate(), true); updateBtn.Visibility = c.PendingUpdate == null ? Visibility.Collapsed : Visibility.Visible; updateBtn.HorizontalAlignment = HorizontalAlignment.Left; updateBtn.Margin = new Thickness(0, 0, 0, 10);
-            if (c.PendingUpdate != null) updateBtn.Content = "Update to v" + c.PendingUpdate.Version.ToString(2);
+            if (c.PendingUpdate != null) updateBtn.Content = "Update to v" + Updater.Show(c.PendingUpdate.Version);
             foot.Children.Add(updateBtn);
             foot.Children.Add(Ui.Muted("v" + Program.Version + " \u00B7 reads only", 11, 0));
             DockPanel.SetDock(foot, Dock.Bottom); side.Children.Add(foot);
@@ -116,7 +116,7 @@ namespace HallowGear
             top.Children.Add(new TextBlock { Text = "Your gear", FontSize = 22, FontFamily = Ui.Head, FontWeight = FontWeights.SemiBold });
             sp.Children.Add(top);
             var now = DateTime.Now;
-            string how = c.Game != null ? "A game is running (" + c.Game + "): the mouse is only listened to, never asked; the headset is read at most every 2 min; Bluetooth devices aren't read (only what they send by themselves is heard). Alerts wait until you're done."
+            string how = c.Game != null ? "A game is running (" + c.Game + "): " + c.GameAskLine() + "; the headset is read at most every 2 min; Bluetooth devices aren't read (only what they send by themselves is heard). Alerts wait until you're done."
                 : "Read " + Ago(c.LastRead, now) + " \u00B7 every " + (c.IntervalSeconds / 60) + " min" + (Controller.OnBattery() ? " (on battery)" : "") + " and when gear is plugged in or out" + (c.S.Bluetooth ? " \u00B7 Bluetooth devices every 5 min." : ".");
             sp.Children.Add(Ui.Muted(how, 12, 14));
             if (c.Game != null && c.Router.Held.Count > 0)
@@ -184,7 +184,7 @@ namespace HallowGear
             var mid = new StackPanel { Margin = new Thickness(0, 0, 18, 0) }; Grid.SetColumn(mid, 1);
             var title = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
             title.Children.Add(new TextBlock { Text = d.Name, FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-            var pk = PillKeys(d); var pill = Ui.Pill((d.Paused ? "Paused \u00B7 " : "") + d.StateLabel, pk[0], pk[1]); title.Children.Add(pill);
+            var pk = PillKeys(d); var pill = Ui.Pill(d.Waiting ? "Waiting \u00B7 game running" : d.LastKnown && d.Connected ? "Last known \u00B7 " + d.StateLabel : (d.Paused ? "Paused \u00B7 " : "") + d.StateLabel, pk[0], pk[1]); title.Children.Add(pill);
             mid.Children.Add(title);
             if (d.HasBattery)
             {
@@ -197,7 +197,7 @@ namespace HallowGear
                 fillGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0, v), GridUnitType.Star) });
                 fillGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0, 100 - v), GridUnitType.Star) });
                 var fillKey = d.Charging || d.Full ? "Green" : v <= c.S.Low2 ? "Red" : v <= c.S.Low1 ? "Amber" : "Green";
-                if (!d.Connected || d.Asleep || !d.Battery.HasValue) fillKey = "Faint";
+                if (!d.Connected || d.Asleep || !d.Battery.HasValue || d.LastKnown) fillKey = "Faint";   // 1.3.1: remembered values are faint until fresh
                 fillGrid.Children.Add(new Border { Background = Ui.R(fillKey), CornerRadius = new CornerRadius(2) });
                 track.Child = fillGrid; row.Children.Add(track);
                 mid.Children.Add(row);
@@ -205,7 +205,9 @@ namespace HallowGear
             var bits = new List<string> { d.Via };
             if (d.Bluetooth) bits.Add(d.Connected ? "connected" : d.LastSeen.HasValue ? "last seen " + Ago(d.LastSeen, now) : "not seen yet");
             if (d.Bluetooth && !c.AlertsOn(d)) bits.Add("alerts off");
-            if (d.HasBattery && !(d.Bluetooth && !d.Connected)) bits.Add(d.Paused ? "paused while you play \u00B7 last read " + Ago(d.Updated, now) : "updated " + Ago(d.Updated, now));
+            if (d.Waiting) bits.Add(GearDevice.WaitingText);                                   // 1.3.1: paired (the receiver says so), nothing heard yet
+            if (d.LastKnown) bits.Add(RememberedGear.LastKnownText(d, now));                   // 1.3.1: remembered from earlier, until fresh data arrives
+            else if (d.HasBattery && !d.Waiting && !(d.Bluetooth && !d.Connected)) bits.Add(d.Paused ? "paused while you play \u00B7 last read " + Ago(d.Updated, now) : "updated " + Ago(d.Updated, now));
             mid.Children.Add(Ui.Muted(string.Join(" \u00B7 ", bits.Where(x => !string.IsNullOrEmpty(x))), 11.5, 2));
             if (d.Source != null) mid.Children.Add(Ui.Muted("From: " + d.Source + (d.Estimated ? " (estimated)" : ""), 11, 2));
             if (d.Note != null) { var n = Ui.Muted(d.Note, 11.5, 0); n.FontStyle = FontStyles.Italic; mid.Children.Add(n); }
@@ -274,9 +276,7 @@ namespace HallowGear
             sp.Children.Add(PerDeviceSection());
             sp.Children.Add(Section("Reading",
                 Chips("Check every", new[] { 60, 120, 300 }, S.PollSeconds, v => v / 60 + " min", v => { S.PollSeconds = v; c.SaveSettings(); }),
-                Ui.Muted("On battery power (a laptop) it checks every 5 minutes at most. It also checks when gear is plugged in or out.", 11.5, 6),
-                Ui.Switch("Ask the mouse during games too (every 2 min)", S.ReadMouseInGames, v => { S.ReadMouseInGames = v; c.SaveSettings(); }),
-                Ui.Muted("Off (recommended): during a game Hallow Gear sends nothing to the mouse or receiver - it only listens to the battery reports the mouse sends by itself, so it can't add input latency. The headset's base station is a separate USB device and is read at most every 2 minutes.", 11.5, 0)));
+                Ui.Muted("On battery power (a laptop) it checks every 5 minutes at most. It also checks when gear is plugged in or out. While a game runs, see While I'm gaming. The headset's base station is a separate USB device and is read at most every 2 minutes during games.", 11.5, 0)));
             sp.Children.Add(BluetoothSection());
             var looks = new WrapPanel { Margin = new Thickness(0, 6, 0, 6) };
             looks.Children.Add(new TextBlock { Text = "Look", Width = 150, VerticalAlignment = VerticalAlignment.Center });
@@ -314,6 +314,7 @@ namespace HallowGear
         }
         static readonly string[] Corners = { "top-right", "top-left", "bottom-right", "bottom-left" };
         static string CornerLabel(string c) { switch (c) { case "top-left": return "Top left"; case "bottom-right": return "Bottom right"; case "bottom-left": return "Bottom left"; } return "Top right"; }
+        public static string GameAskLabel(string v) { return v == "5min" ? "Every 5 min" : v == "never" ? "Never" : "Once when Gear starts"; }
         FrameworkElement Sub(string text) { var t = Ui.Caps(text, 10, Ui.R("Muted")); t.Margin = new Thickness(0, 14, 0, 4); return t; }
 
         // 1.3: Settings > While I'm gaming - per alert type, the pop-up's monitor / corner / time, the single-monitor fallback
@@ -327,6 +328,10 @@ namespace HallowGear
             items.Add(typeRow("charging", () => S.GameCharging, v => S.GameCharging = v));
             items.Add(typeRow("full", () => S.GameFull, v => S.GameFull = v));
             items.Add(typeRow("wired", () => S.GameWired, v => S.GameWired = v));
+            // 1.3.1: asking the mouse during a game
+            items.Add(Sub("Ask the mouse for its battery"));
+            items.Add(Pick(null, GearSettings.GameAsks, S.GameAsk, GameAskLabel, v => { S.GameAsk = v; c.SaveSettings(); }));
+            items.Add(Ui.Muted("One battery question is 1-2 tiny messages, far too small to add input latency; the rest of the time Hallow Gear only listens to the reports the mouse sends by itself.", 11.5, 0));
             items.Add(Sub("The pop-up"));
             var mons = c.Layout();
             var screens = new List<string> { "auto" }; screens.AddRange(mons.Select(m => m.Device)); screens.Add("same");
@@ -440,7 +445,8 @@ namespace HallowGear
                 "Its name, and its battery from the mouse itself: Unified Battery (0x1004) when it has it - percent, charging / full / discharging, external power - or Battery Status (0x1000), or Battery Voltage (0x1001, then the percent is an estimate).",
                 "Asleep or switched off: the receiver says the mouse isn't reachable (or that its link went down).",
                 "Wired vs wireless: when it's on its USB cable it shows up as its own Logitech USB device too - then it's \"wired (charging)\".",
-                "During a game it's never asked anything (unless you switch that on) - Hallow Gear only listens to the battery reports the mouse sends by itself." }));
+                "What is paired: the receiver's own list (its pairing info and the name it keeps per slot) - the receiver answers that itself, nothing goes to the mouse.",
+                "During a game: by default one battery question when Hallow Gear starts (1-2 tiny messages; every 5 min or never in Settings > While I'm gaming), otherwise it only listens to the battery reports the mouse sends by itself." }));
             sp.Children.Add(Item("headphones", "ASTRO A50 (Gen 5) headset", new[] {
                 "Battery percent and docked / charging, from the base station (USB 046d:0b1c), using the one battery question the open-source HeadsetControl project documents for the A50 Gen 5. That protocol is reverse-engineered by that project, not published by Logitech.",
                 "Not known: whether the headset itself is switched on (the base station answers either way), and the A50 X (a different protocol) isn't supported.",

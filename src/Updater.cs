@@ -33,6 +33,7 @@ namespace HallowGear
     {
         public const string Repo = "Dom428/hallow-gear";
         public static Version Current { get { return typeof(Updater).Assembly.GetName().Version; } }
+        public static string Show(Version v) { return v.Build > 0 ? v.ToString(3) : v.ToString(2); }   // 1.3.1: "1.3.1", "1.3"
         static string Api { get { var a = Environment.GetEnvironmentVariable("HALLOW_GEAR_API"); return string.IsNullOrEmpty(a) || GearSettings.TestDir == null ? "https://api.github.com" : a.TrimEnd('/'); } }
 
         static WebClient Client()
@@ -79,7 +80,7 @@ namespace HallowGear
                 ZipFile.ExtractToDirectory(zip, x);
                 var script = Directory.GetFiles(x, "Install.ps1", SearchOption.AllDirectories).FirstOrDefault();
                 if (script == null) return "The update is missing its installer.";
-                if (GearSettings.TestDir != null) return "TEST: checked and unpacked v" + r.Version.ToString(2) + " - the installer wasn't run.";
+                if (GearSettings.TestDir != null) return "TEST: checked and unpacked v" + Updater.Show(r.Version) + " - the installer wasn't run.";
                 Process.Start(new ProcessStartInfo("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script + "\"") { UseShellExecute = false, CreateNoWindow = true });
                 return null;
             }

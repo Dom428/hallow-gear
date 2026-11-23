@@ -21,14 +21,14 @@ using WF = System.Windows.Forms;
 [assembly: AssemblyTitle("Hallow Gear")]
 [assembly: AssemblyProduct("Hallow Gear")]
 [assembly: AssemblyDescription("Battery and charging of your Logitech gear and Bluetooth devices")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.3.1.0")]
+[assembly: AssemblyFileVersion("1.3.1.0")]
 
 namespace HallowGear
 {
     public static class Program
     {
-        public const string Version = "1.3";
+        public const string Version = "1.3.1";
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
 
         [STAThread]
@@ -37,6 +37,8 @@ namespace HallowGear
             int ci = Array.IndexOf(args, "--cmd");
             if (ci >= 0) { Environment.Exit(Family.RunCmd(ci + 1 < args.Length ? args[ci + 1] : "")); return; }
             try { Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+            int pg = Array.IndexOf(args, "--probe-game");
+            if (pg >= 0) { Environment.Exit(ProbeGame(pg + 1 < args.Length ? args[pg + 1] : null)); return; }
             int pi = Array.IndexOf(args, "--probe");
             if (pi >= 0) { Environment.Exit(Probe(pi + 1 < args.Length ? args[pi + 1] : null)); return; }
             try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }
@@ -108,6 +110,28 @@ namespace HallowGear
             }
             Write(file, sb); return 0;
         }
+        // 1.3.1 --probe-game <log file>: exactly what a fresh Gear does when it starts during a game, with nothing remembered: the receiver's
+        // pairing info (register 0xB5 reads it answers itself) and the ONE gentle battery read per paired device (1-2 short messages). Nothing
+        // else is sent, nothing is saved, the headset and Bluetooth aren't read.
+        static int ProbeGame(string file)
+        {
+            var sb = new StringBuilder();
+            Action<string> P = l => { sb.AppendLine(l); try { Console.WriteLine(l); } catch { } };
+            P("Hallow Gear " + Version + " start-up-in-a-game probe, " + DateTime.Now.ToString("s") + ", game: " + (GameWatch.Running(new List<string>()) ?? "none"));
+            GearSettings.Frozen = true; var s = new GearSettings(); s.Fix();   // nothing remembered, nothing saved
+            using (var src = new LogiSource(s))
+            {
+                var list = src.Read(false, false, true, true);
+                foreach (var d in list)
+                    P(string.Format("{0,-9} {1,-28} battery {2,-5} state {3,-14} via {4}{5}{6}{7}", d.Kind, d.Name, d.Battery.HasValue ? d.Battery + "%" : "-", d.State, d.Via,
+                        d.Waiting ? "  (" + GearDevice.WaitingText + ")" : "", d.Provisional ? "  [named by the receiver]" : "", d.Source != null ? "  [" + d.Source + "]" : ""));
+                P("--- log:");
+                foreach (var l in src.Log) P(l);
+                foreach (var l in src.SentSummary()) P("sent: " + l);
+                P("total messages sent: " + SentLog.Total);
+            }
+            Write(file, sb); return 0;
+        }
         static void Write(string file, StringBuilder sb) { if (file != null) try { File.WriteAllText(file, sb.ToString(), new UTF8Encoding(false)); } catch { } }
 
         // --snap <folder>: every page with made-up gear, dark and light ("-light")
@@ -128,7 +152,7 @@ namespace HallowGear
             // the mouse on its cable and charging, the headset low and undocked, a game running with the held alert
             fake.Devices[0].Wired = true; fake.Devices[0].Charging = true; fake.Devices[0].Battery = 71; fake.Devices[0].External = true; fake.Devices[0].Via = "USB cable + LIGHTSPEED receiver";
             fake.Devices[1].Full = false; fake.Devices[1].External = false; fake.Devices[1].Battery = 9;
-            c.SnapGame("Delta Force"); c.ReadNow(true, true, false);
+            c.SnapGame("Delta Force"); c.ReadNow(true, true, false); c.SnapWaiting();   // 1.3.1: the mouse paired, waiting for its battery report, last known 66 %
             w.Show("devices"); Snap.Save(w, F("devices-game"), 940, 0);
             // asleep and not connected
             fake.Reset(); fake.Devices[0].Asleep = true; fake.Devices[0].Note = "Asleep or switched off - move it to wake it."; fake.Devices[1].Connected = false; fake.Devices[1].Battery = null; fake.Devices[1].Note = "The base station isn't plugged in.";

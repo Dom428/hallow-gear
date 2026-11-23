@@ -1,4 +1,4 @@
-﻿HALLOW GEAR - battery and charging of your Logitech gear and Bluetooth devices
+﻿﻿HALLOW GEAR - battery and charging of your Logitech gear and Bluetooth devices
 
 A card for each piece of gear - a LIGHTSPEED mouse, an ASTRO A50 (Gen 5) headset, a Logitech
 keyboard, Bluetooth earbuds / headsets / controllers - with its battery, charging / full / on
@@ -21,15 +21,17 @@ WHAT IT DOES
   fully charged, switched to wired / wireless (off by default).
 - While you game, you choose what each alert does: wait until you're done, a quiet line in
   Hallow Overlay, Gear's own pop-up on another monitor (it never takes focus from the game), or
-  a Windows notification anyway. The mouse isn't asked anything during a game - Hallow Gear
-  only listens to what it sends by itself.
+  a Windows notification anyway. During a game the mouse is asked for its battery at most once
+  (when Gear starts; your choice) - otherwise Hallow Gear only listens to what it sends by
+  itself.
 - Runs next to Logitech G HUB. Checks every minute (every 5 min on battery power) and when gear
   is plugged in or out.
 - Hallow family: Hallow Hub's tray menu, the Hallow accent, light and dark mode, status for
   Hallow Overlay, optional start at sign-in.
 
 GOOD TO KNOW
-- Every message it can send is on a fixed read-only list (battery, name, "are you there?").
+- Every message it can send is on a fixed read-only list (battery, name, "are you there?",
+  and the receiver's own list of what is paired).
   Nothing that changes DPI, lighting, profiles, pairing or sound can even be built.
 - Notifications are Windows notifications: allow them for Hallow Gear (or Hallow Hub) in
   Settings > System > Notifications.
@@ -37,6 +39,17 @@ GOOD TO KNOW
 - Firmware updates are left to G HUB on purpose: Hallow Gear never writes to a device.
 - Not supported: other brands' 2.4 GHz dongles (Razer, SteelSeries, Corsair...), the A50 Gen 4
   and the A50 X.
+
+WHAT'S NEW IN 1.3.1
+- Your mouse shows up even when Hallow Gear starts during a game. Before, a mouse Gear hadn't
+  read yet had no card until it happened to send a battery report by itself. Now Gear asks the
+  receiver what is paired (a question the receiver answers itself - nothing goes to the mouse)
+  and shows the card at once: "PRO X 2 - waiting for its battery report (game running)".
+- One gentle battery question when Gear starts, even during a game (1-2 tiny messages), then it
+  only listens again. Settings > While I'm gaming > Ask the mouse for its battery: once when
+  Gear starts (default), every 5 min, or never.
+- Gear remembers your gear between restarts (devices.json in its data folder) and shows every
+  device straight away as "last known: 66 % - 12 min ago" until fresh data arrives.
 
 WHAT'S NEW IN 1.3
 - Settings > While I'm gaming: for each kind of alert (low, very low, charging, fully charged,

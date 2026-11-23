@@ -4,7 +4,10 @@
 //   device index: 1..6 = a receiver slot, 0xFF = a device on its own USB cable
 //   errors: HID++ 2.0 [id, dev, 0xFF, feature index, function|sw, code] - HID++ 1.0 [0x10, dev, 0x8F, sub id, address, code]
 // The allow-list below is the complete list of functions Hallow Gear can send. Everything else - DPI, lighting, onboard profiles,
-// pairing, receiver registers, host switching, any "set" - is refused by SafeReport.Hidpp before a single byte is built.
+// pairing, receiver register writes, host switching, any "set" - is refused by SafeReport.Hidpp before a single byte is built.
+// 1.3.1: plus ONE kind of HID++ 1.0 receiver read (SafeReport.ForReceiver): GET_LONG_REGISTER 0xB5 "receiver info", sub-pages
+// 0x20-0x25 (pairing information of slot 1-6) and 0x40-0x45 (the name the receiver keeps for slot 1-6), as documented by Solaar.
+// The receiver answers it itself - nothing goes over the air to the mouse.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -82,7 +85,8 @@ namespace HallowGear
             var b = new BatteryReading { Source = "HID++ Unified Battery (0x1004)" };
             int lvl = p[1];
             b.Level = (lvl & 8) != 0 ? "full" : (lvl & 4) != 0 ? "good" : (lvl & 2) != 0 ? "low" : (lvl & 1) != 0 ? "critical" : null;
-            if (socSupported && p[0] <= 100) b.Percent = p[0];
+            // 1.3.1: 0 % with a level above "critical" = the device doesn't report a percentage (the start-up read skips getCapabilities)
+            if (socSupported && p[0] <= 100 && !(p[0] == 0 && (lvl & 0x0E) != 0)) b.Percent = p[0];
             else if (b.Level != null) { b.Percent = b.Level == "full" ? 100 : b.Level == "good" ? 60 : b.Level == "low" ? 20 : 5; b.Estimated = true; }
             switch (p[2]) { case 1: case 2: b.Charging = true; break; case 3: b.Full = true; break; }
             b.External = p[3] != 0 || b.Charging || b.Full;
@@ -131,6 +135,56 @@ namespace HallowGear
             if (r == null || r.Length < 5 || r[0] != ShortId || r[1] != dev || r[2] != 0x41) return null;
             return (r[4] & 0x40) == 0;
         }
+        // ---- 1.3.1: HID++ 1.0 receiver register READS (Solaar's docs: receiver info register 0xB5). Request (short, to the receiver = 0xFF):
+        //   [0x10, 0xFF, 0x83 GET_LONG_REGISTER, 0xB5, sub-page, 0, 0] -> reply [0x11, 0xFF, 0x83, 0xB5, sub-page, 15 bytes]
+        //   sub-page 0x20 + n - 1: pairing info of slot n = [0x2n, destination id, report interval, wpid hi, wpid lo, -, -, kind (low nibble), ...]
+        //   sub-page 0x40 + n - 1: the name of slot n = [0x4n, length, name...]
+        //   error: [0x10, 0xFF, 0x8F, 0x83, 0xB5, code, 0] (an empty slot answers with an error)
+        public const byte ReceiverIndex = 0xFF, GetLongRegister = 0x83, RegReceiverInfo = 0xB5, PairingPage = 0x20, NamePage = 0x40;
+        // THE RECEIVER ALLOW-LIST: the name of an allowed receiver read; null = refused (SET_REGISTER 0x80 / SET_LONG_REGISTER 0x82, GET_REGISTER
+        // 0x81, any other register, any other sub-page, any extra argument)
+        public static string ReceiverReadName(byte subId, byte register, byte[] args)
+        {
+            args = args ?? new byte[0];
+            if (subId != GetLongRegister || register != RegReceiverInfo || args.Length < 1 || args.Skip(1).Any(b => b != 0)) return null;
+            byte page = args[0];
+            if (page >= PairingPage && page < PairingPage + 6) return "getPairingInfo (slot " + (page - PairingPage + 1) + ")";
+            if (page >= NamePage && page < NamePage + 6) return "getDeviceName (slot " + (page - NamePage + 1) + ")";
+            return null;
+        }
+        public static bool IsRegisterReply(byte[] r, byte page) { return r != null && r.Length >= 5 && r[0] == LongId && r[1] == ReceiverIndex && r[2] == GetLongRegister && r[3] == RegReceiverInfo && r[4] == page; }
+        public static int RegisterError(byte[] r)
+        {
+            if (r == null || r.Length < 6 || r[0] != ShortId || r[1] != ReceiverIndex || r[2] != 0x8F || r[3] != GetLongRegister || r[4] != RegReceiverInfo) return 0;
+            return r[5] == 0 ? 0xFF : r[5];
+        }
+        // the receiver's kind codes (HID++ 1.0 pairing info, and the low nibble of the 0x41 notification's flags)
+        public static string PairKindName(int k)
+        {
+            switch (k & 0x0F) { case 1: return "keyboard"; case 2: return "mouse"; case 3: return "numpad"; case 4: return "presenter"; case 8: return "trackball"; case 9: return "touchpad"; }
+            return null;
+        }
+        // pairing info (the reply's parameters, from the sub-page byte on); null when the slot is empty
+        public static PairingInfo Pairing(byte[] p, int slot)
+        {
+            if (p == null || p.Length < 8 || p[0] != PairingPage + slot - 1) return null;
+            var wpid = (ushort)(p[3] << 8 | p[4]); if (wpid == 0 || wpid == 0xFFFF) return null;
+            return new PairingInfo { Slot = slot, Wpid = wpid, Kind = PairKindName(p[7]), From = "receiver register 0xB5" };
+        }
+        public static string PairName(byte[] p, int slot)
+        {
+            if (p == null || p.Length < 3 || p[0] != NamePage + slot - 1) return null;
+            int n = Math.Min((int)p[1], p.Length - 2); if (n <= 0) return null;
+            var s = Encoding.UTF8.GetString(p, 2, n).Trim('\0', ' ');
+            return s.Length == 0 || s.Any(ch => ch < 0x20) ? null : s;
+        }
+        // the receiver's 0x41 device connection notification: [0x10, slot, 0x41, protocol, flags | kind, wpid lo, wpid hi]
+        public static PairingInfo FromConnection(byte[] r)
+        {
+            if (r == null || r.Length < 7 || r[0] != ShortId || r[2] != 0x41 || r[1] < 1 || r[1] > 6) return null;
+            return new PairingInfo { Slot = r[1], Wpid = (ushort)(r[6] << 8 | r[5]), Kind = PairKindName(r[4]), LinkUp = (r[4] & 0x40) == 0, From = "connection notification 0x41" };
+        }
+
         // a battery report heard without asking (the device's own event, or the answer to someone else's question - e.g. G HUB's)
         public static BatteryReading Passive(byte[] r, byte dev, ushort batteryFeature, byte batteryIndex, bool socSupported)
         {
@@ -140,6 +194,46 @@ namespace HallowGear
             if (batteryFeature == BatteryStatus && fn == 0) return Status(p);
             if (batteryFeature == BatteryVoltage && fn == 0) return Voltage(p);
             return null;
+        }
+    }
+
+    // 1.3.1: what a receiver says is paired in a slot (no question to the device itself)
+    public class PairingInfo
+    {
+        public int Slot; public ushort Wpid; public string Kind, Name, From; public bool LinkUp = true;
+        public override string ToString() { return string.Format("slot {0}: {1} wpid {2:X4} '{3}' ({4})", Slot, Kind ?? "?", Wpid, Name, From); }
+    }
+
+    // 1.3.1: the receiver itself (device index 0xFF) - only the allow-listed register reads above
+    public class HidppReceiver
+    {
+        readonly IReportPort longPort, shortPort; public int LastError; public int ReplyMs = 600;
+        public readonly List<string> Sent = new List<string>();
+        public HidppReceiver(IReportPort longPort, IReportPort shortPort) { this.longPort = longPort; this.shortPort = shortPort; }
+        public byte[] Read(byte page)
+        {
+            LastError = 0;
+            if (shortPort == null) { LastError = -1; return null; }   // HID++ 1.0 register requests are short reports
+            var req = SafeReport.ForReceiver(Hidpp.GetLongRegister, Hidpp.RegReceiverInfo, page);
+            if (req == null) { LastError = -3; return null; }
+            lock (Sent) Sent.Add(req.What); SentLog.Add(req.What);
+            byte[] reply;
+            using (var w = new ReplyWaiter(r => Hidpp.IsRegisterReply(r, page) || Hidpp.RegisterError(r) != 0, longPort, shortPort))
+            {
+                if (!shortPort.Write(req)) { LastError = -1; return null; }
+                reply = w.Wait(ReplyMs);
+            }
+            if (reply == null) { LastError = -1; return null; }
+            int e = Hidpp.RegisterError(reply); if (e != 0) { LastError = e; return null; }
+            return Hidpp.Params(reply);
+        }
+        // what is paired in slot n (and the name the receiver keeps for it); null = empty, or the receiver doesn't say
+        public PairingInfo Paired(int slot)
+        {
+            var info = Hidpp.Pairing(Read((byte)(Hidpp.PairingPage + slot - 1)), slot);
+            if (info == null) return null;
+            info.Name = Hidpp.PairName(Read((byte)(Hidpp.NamePage + slot - 1)), slot);
+            return info;
         }
     }
 
@@ -183,7 +277,7 @@ namespace HallowGear
         {
             int i; if (features.TryGetValue(id, out i)) return i;
             var p = Call(Hidpp.IRoot, 0, (byte)(id >> 8), (byte)id);
-            if (p == null) { if (LastError > 0) features[id] = 0; return 0; }   // no answer: ask again next time
+            if (p == null) { if (LastError > 0 && LastError != 8 && LastError != 9) features[id] = 0; return 0; }   // no answer / asleep (1.3.1): ask again next time
             features[id] = p.Length > 0 && p[0] < 0x80 ? p[0] : 0; return features[id];
         }
         public string Name()
@@ -217,6 +311,20 @@ namespace HallowGear
                 if (LastError < 0) return 0;   // no answer: don't conclude "no battery"
             }
             return 0;
+        }
+        // 1.3.1: the ONE gentle read while a game runs: 1 or 2 short messages - getFeature(Unified Battery) when its index isn't known yet
+        // this session, then getStatus. No ping, no name, no capabilities; a device with another battery feature waits until after the game.
+        public BatteryReading GentleBattery()
+        {
+            if (BatteryIndex == 0)
+            {
+                int i = FeatureIndex(Hidpp.UnifiedBattery);
+                if (i <= 0) return null;
+                BatteryFeature = Hidpp.UnifiedBattery; BatteryIndex = (byte)i;
+            }
+            if (BatteryFeature == Hidpp.UnifiedBattery) return Hidpp.Unified(Call(Hidpp.UnifiedBattery, 1), SocSupported);
+            if (BatteryFeature == Hidpp.BatteryStatus) return Hidpp.Status(Call(Hidpp.BatteryStatus, 0));
+            return Hidpp.Voltage(Call(Hidpp.BatteryVoltage, 0));
         }
         public BatteryReading Battery()
         {
