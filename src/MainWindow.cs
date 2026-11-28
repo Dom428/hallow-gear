@@ -16,7 +16,7 @@ namespace HallowGear
     {
         readonly Controller c;
         string page = "devices";
-        readonly Dictionary<string, Button> nav = new Dictionary<string, Button>();
+        readonly Dictionary<string, ToggleButton> nav = new Dictionary<string, ToggleButton>();
         Border content; TextBlock sayText; Button updateBtn; DispatcherTimer sayTimer, clock;
         public bool Exiting;
         public static readonly string[][] Pages = { new[] { "devices", "Your gear", "battery-three-quarters" }, new[] { "settings", "Settings", "gear" }, new[] { "about", "What it can read", "circle-info" } };
@@ -43,39 +43,34 @@ namespace HallowGear
         public void Rebuild()
         {
             Ui.Restyle(this);
-            var root = new Grid();
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
-            root.ColumnDefinitions.Add(new ColumnDefinition());
-            var side = new DockPanel { Background = Ui.R("Side"), LastChildFill = false };
-            var head = new StackPanel { Margin = new Thickness(16, 18, 16, 18) };
-            head.Children.Add(Ui.Header("GEAR", 18));
-            head.Children.Add(Ui.Muted("Your gear's battery", 11.5, 0));
-            DockPanel.SetDock(head, Dock.Top); side.Children.Add(head);
+            // 1.4 (the modern Hallow look): the name and text tabs on top, the update button on the right, a slim status bar below
+            var root = new DockPanel();
+            var top = new DockPanel { Height = 56, Margin = new Thickness(20, 0, 16, 0) };
+            var brand = Ui.Header("GEAR", 16); brand.VerticalAlignment = VerticalAlignment.Center; brand.Margin = new Thickness(0, 0, 20, 0);
+            DockPanel.SetDock(brand, Dock.Left); top.Children.Add(brand);
+            updateBtn = Ui.Btn("Update", () => c.InstallUpdate(), true); updateBtn.Visibility = c.PendingUpdate == null ? Visibility.Collapsed : Visibility.Visible; updateBtn.Margin = new Thickness(12, 0, 0, 0); updateBtn.VerticalAlignment = VerticalAlignment.Center;
+            if (c.PendingUpdate != null) updateBtn.Content = "Update to v" + Updater.Show(c.PendingUpdate.Version);
+            DockPanel.SetDock(updateBtn, Dock.Right); top.Children.Add(updateBtn);
+            var tabs = new StackPanel { Orientation = Orientation.Horizontal };
             nav.Clear();
             foreach (var p in Pages)
             {
                 var id = p[0];
-                var b = new Button { Style = Ui.S("Nav"), Content = Icons.WithText(p[2], p[1], 14, Ui.R("Text")), Margin = new Thickness(8, 0, 8, 0) };
+                var b = new ToggleButton { Style = Ui.S("Tab"), Content = p[1] };
                 b.Click += (s, e) => Show(id);
-                DockPanel.SetDock(b, Dock.Top); side.Children.Add(b); nav[id] = b;
+                tabs.Children.Add(b); nav[id] = b;
             }
-            var foot = new StackPanel { Margin = new Thickness(16, 0, 16, 14) };
-            updateBtn = Ui.Btn("Update", () => c.InstallUpdate(), true); updateBtn.Visibility = c.PendingUpdate == null ? Visibility.Collapsed : Visibility.Visible; updateBtn.HorizontalAlignment = HorizontalAlignment.Left; updateBtn.Margin = new Thickness(0, 0, 0, 10);
-            if (c.PendingUpdate != null) updateBtn.Content = "Update to v" + Updater.Show(c.PendingUpdate.Version);
-            foot.Children.Add(updateBtn);
-            foot.Children.Add(Ui.Muted("v" + Program.Version + " \u00B7 reads only", 11, 0));
-            DockPanel.SetDock(foot, Dock.Bottom); side.Children.Add(foot);
-            root.Children.Add(side);
-            root.Children.Add(new Border { Width = 1, Background = Ui.R("Line"), HorizontalAlignment = HorizontalAlignment.Right });
+            top.Children.Add(tabs);
+            var topWrap = new Border { Child = top, BorderBrush = Ui.R("LineDim"), BorderThickness = new Thickness(0, 0, 0, 1) };
+            DockPanel.SetDock(topWrap, Dock.Top); root.Children.Add(topWrap);
 
-            var right = new DockPanel(); Grid.SetColumn(right, 1);
             var bar = new DockPanel { Background = Ui.R("Side"), Height = 28 };
-            sayText = new TextBlock { FontSize = 12, Foreground = Ui.R("TextSoft"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+            var ver = Ui.Muted("v" + Program.Version + " \u00B7 reads only", 11, 0); ver.VerticalAlignment = VerticalAlignment.Center; ver.Margin = new Thickness(12, 0, 16, 0);
+            DockPanel.SetDock(ver, Dock.Right); bar.Children.Add(ver);
+            sayText = new TextBlock { FontSize = 11.5, Foreground = Ui.R("TextSoft"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
             bar.Children.Add(sayText);
-            var barWrap = new Border { BorderBrush = Ui.R("Line"), BorderThickness = new Thickness(0, 1, 0, 0), Child = bar };
-            DockPanel.SetDock(barWrap, Dock.Bottom); right.Children.Add(barWrap);
-            content = new Border(); right.Children.Add(content);
-            root.Children.Add(right);
+            DockPanel.SetDock(bar, Dock.Bottom); root.Children.Add(bar);
+            content = new Border(); root.Children.Add(content);
             Content = root;
             Show(page);
         }
@@ -89,7 +84,7 @@ namespace HallowGear
         public void Show(string id)
         {
             page = PageId(id) ?? "devices";
-            foreach (var kv in nav) kv.Value.Tag = kv.Key == page ? "on" : null;
+            foreach (var kv in nav) kv.Value.IsChecked = kv.Key == page;
             BuildPage();
         }
         void BuildPage()
@@ -109,20 +104,20 @@ namespace HallowGear
         // ---------------- Your gear
         FrameworkElement DevicesPage()
         {
-            var sp = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
-            var top = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-            var refresh = Ui.Btn(c.Busy ? "Reading..." : "Refresh now", () => { c.RefreshNow(); Say("Reading your gear..."); }); refresh.Margin = new Thickness(0);
+            var sp = new StackPanel { Margin = new Thickness(24, 20, 24, 24) };
+            var top = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
+            var refresh = Ui.Ghost(c.Busy ? "Reading..." : "Refresh now", () => { c.RefreshNow(); Say("Reading your gear..."); }); refresh.Margin = new Thickness(0); refresh.VerticalAlignment = VerticalAlignment.Center;
             DockPanel.SetDock(refresh, Dock.Right); top.Children.Add(refresh);
-            top.Children.Add(new TextBlock { Text = "Your gear", FontSize = 22, FontFamily = Ui.Head, FontWeight = FontWeights.SemiBold });
+            top.Children.Add(new TextBlock { Text = "Your gear", FontSize = 22, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
             sp.Children.Add(top);
             var now = DateTime.Now;
             string how = c.Game != null ? "A game is running (" + c.Game + "): " + c.GameAskLine() + "; the headset is read at most every 2 min; Bluetooth devices aren't read (only what they send by themselves is heard). Alerts wait until you're done."
                 : "Read " + Ago(c.LastRead, now) + " \u00B7 every " + (c.IntervalSeconds / 60) + " min" + (Controller.OnBattery() ? " (on battery)" : "") + " and when gear is plugged in or out" + (c.S.Bluetooth ? " \u00B7 Bluetooth devices every 5 min." : ".");
-            sp.Children.Add(Ui.Muted(how, 12, 14));
+            sp.Children.Add(Ui.Muted(how, 12, 16));
             if (c.Game != null && c.Router.Held.Count > 0)
             {
                 var held = string.Join(" \u00B7 ", c.Router.Held.Select(a => a.Title));
-                var banner = new Border { Background = Ui.R("AmberBg"), BorderBrush = Ui.R("Amber"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3), Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(0, 0, 0, 14),
+                var banner = new Border { Background = Ui.R("AmberBg"), CornerRadius = new CornerRadius(8), Padding = new Thickness(14, 10, 14, 10), Margin = new Thickness(0, 0, 0, 12),
                     Child = Icons.WithText("bell-slash", "Held for after the game: " + held + (c.Router.OverlayLine != null ? "  (shown as a quiet line in Hallow Overlay)" : ""), 13, Ui.R("Amber")) };
                 ((TextBlock)((StackPanel)banner.Child).Children[1]).Foreground = Ui.R("Text"); ((TextBlock)((StackPanel)banner.Child).Children[1]).TextWrapping = TextWrapping.Wrap;
                 sp.Children.Add(banner);
@@ -130,9 +125,9 @@ namespace HallowGear
             var shown = c.VisibleDevices.ToList();
             if (shown.Count == 0)
                 sp.Children.Add(Ui.Card(Ui.Muted(c.LastRead == null ? "Looking for your gear..." : "No gear found. Plug in the LIGHTSPEED, Unifying or Bolt receiver, the A50 base station or a Logitech keyboard - or connect a Bluetooth device that reports its battery to Windows.", 13)));
-            foreach (var d in shown) { var card = Card(d, now); card.Margin = new Thickness(0, 0, 0, 12); card.Tag = d.Key; sp.Children.Add(card); }
+            foreach (var d in shown) { var card = Card(d, now); card.Margin = new Thickness(0, 0, 0, 10); card.Tag = d.Key; sp.Children.Add(card); }
             int hidden = c.Devices.Count - shown.Count;
-            if (hidden > 0) sp.Children.Add(Ui.Muted(hidden + " hidden Bluetooth device" + (hidden == 1 ? "" : "s") + " - Settings > Bluetooth devices shows " + (hidden == 1 ? "it" : "them") + " again.", 11.5, 0));
+            if (hidden > 0) { var h = Ui.Muted(hidden + " hidden Bluetooth device" + (hidden == 1 ? "" : "s") + " - Settings > Bluetooth devices shows " + (hidden == 1 ? "it" : "them") + " again.", 11.5, 0); h.Margin = new Thickness(4, 4, 0, 0); sp.Children.Add(h); }
             return sp;
         }
         public static string KindIcon(GearDevice d)
@@ -173,35 +168,39 @@ namespace HallowGear
         Border Card(GearDevice d, DateTime now)
         {
             var g = new Grid();
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
             g.ColumnDefinitions.Add(new ColumnDefinition());
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
-            var ic = new Border { Width = 44, Height = 44, CornerRadius = new CornerRadius(4), Background = Ui.R("PanelHi"), VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left,
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+            var ic = new Border { Width = 44, Height = 44, CornerRadius = new CornerRadius(10), Background = Ui.R("PanelHi"), VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left,
                 Child = CardIcon(d) };
             ((FrameworkElement)ic.Child).HorizontalAlignment = HorizontalAlignment.Center; ((FrameworkElement)ic.Child).VerticalAlignment = VerticalAlignment.Center;
             g.Children.Add(ic);
 
-            var mid = new StackPanel { Margin = new Thickness(0, 0, 18, 0) }; Grid.SetColumn(mid, 1);
-            var title = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
-            title.Children.Add(new TextBlock { Text = d.Name, FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-            var pk = PillKeys(d); var pill = Ui.Pill(d.Waiting ? "Waiting \u00B7 game running" : d.LastKnown && d.Connected ? "Last known \u00B7 " + d.StateLabel : (d.Paused ? "Paused \u00B7 " : "") + d.StateLabel, pk[0], pk[1]); title.Children.Add(pill);
+            var mid = new StackPanel { Margin = new Thickness(0, 0, 24, 0) }; Grid.SetColumn(mid, 1);
+            // the name, then the state as a quiet coloured line (a dot, or a bolt while it charges)
+            var title = new WrapPanel { Margin = new Thickness(0, 1, 0, 0) };
+            title.Children.Add(new TextBlock { Text = d.Name, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center });
+            title.Children.Add(StateLine(d));
             mid.Children.Add(title);
             if (d.HasBattery)
             {
-                var row = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-                var pct = new TextBlock { Text = Fmt.Pct(d.Battery, "\u2013%"), FontFamily = Ui.Mono, FontSize = 22, FontWeight = FontWeights.SemiBold, Width = 86, VerticalAlignment = VerticalAlignment.Center };
+                // 1.4: the battery as a slim bar with the percent beside it
+                var row = new DockPanel { Margin = new Thickness(0, 8, 0, 8) };
+                var pct = new TextBlock { Text = Fmt.Pct(d.Battery, "\u2013%"), FontSize = 20, FontWeight = FontWeights.SemiBold, MinWidth = 58, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+                if (!d.Connected || d.Asleep || d.LastKnown) pct.Foreground = Ui.R("Muted");
                 if (d.Estimated) pct.ToolTip = "Estimated from the battery's voltage or level";
                 DockPanel.SetDock(pct, Dock.Right); row.Children.Add(pct);
-                var track = new Border { Height = 12, CornerRadius = new CornerRadius(3), Background = Ui.R("LineDim"), BorderBrush = Ui.R("Line"), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0) };
+                var track = new Border { Height = 6, CornerRadius = new CornerRadius(3), Background = Ui.R("PanelHi"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0) };
                 var fillGrid = new Grid(); int v = d.Battery ?? 0;
                 fillGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0, v), GridUnitType.Star) });
                 fillGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0, 100 - v), GridUnitType.Star) });
                 var fillKey = d.Charging || d.Full ? "Green" : v <= c.S.Low2 ? "Red" : v <= c.S.Low1 ? "Amber" : "Green";
                 if (!d.Connected || d.Asleep || !d.Battery.HasValue || d.LastKnown) fillKey = "Faint";   // 1.3.1: remembered values are faint until fresh
-                fillGrid.Children.Add(new Border { Background = Ui.R(fillKey), CornerRadius = new CornerRadius(2) });
+                fillGrid.Children.Add(new Border { Background = Ui.R(fillKey), CornerRadius = new CornerRadius(3) });
                 track.Child = fillGrid; row.Children.Add(track);
                 mid.Children.Add(row);
             }
+            else ((FrameworkElement)mid.Children[0]).Margin = new Thickness(0, 1, 0, 6);
             var bits = new List<string> { d.Via };
             if (d.Bluetooth) bits.Add(d.Connected ? "connected" : d.LastSeen.HasValue ? "last seen " + Ago(d.LastSeen, now) : "not seen yet");
             if (d.Bluetooth && !c.AlertsOn(d)) bits.Add("alerts off");
@@ -211,23 +210,36 @@ namespace HallowGear
             mid.Children.Add(Ui.Muted(string.Join(" \u00B7 ", bits.Where(x => !string.IsNullOrEmpty(x))), 11.5, 2));
             if (d.Source != null) mid.Children.Add(Ui.Muted("From: " + d.Source + (d.Estimated ? " (estimated)" : ""), 11, 2));
             if (d.Note != null) { var n = Ui.Muted(d.Note, 11.5, 0); n.FontStyle = FontStyles.Italic; mid.Children.Add(n); }
-            if (!d.Connected && c.S.KnownGear.ContainsKey(d.Key)) { var key = d.Key; var fb = Ui.Btn("Forget", () => c.Forget(key)); fb.HorizontalAlignment = HorizontalAlignment.Left; fb.Margin = new Thickness(0, 8, 0, 0); fb.ToolTip = "Stop showing it here (it comes back when it is plugged in again)"; mid.Children.Add(fb); }
+            if (!d.Connected && c.S.KnownGear.ContainsKey(d.Key)) { var key = d.Key; var fb = Ui.Ghost("Forget", () => c.Forget(key)); fb.HorizontalAlignment = HorizontalAlignment.Left; fb.Margin = new Thickness(-10, 6, 0, 0); fb.ToolTip = "Stop showing it here (it comes back when it is plugged in again)"; mid.Children.Add(fb); }
             g.Children.Add(mid);
 
             var spark = new StackPanel(); Grid.SetColumn(spark, 2);
             if (d.HasBattery)
             {
-                spark.Children.Add(Ui.Caps("Last 24 h", 10));
-                spark.Children.Add(Sparkline(c.Hist.For(d.Key), now, 250, 62));
+                spark.Children.Add(Ui.Caps("Last 24 h", 10.5));
+                spark.Children.Add(Sparkline(c.Hist.For(d.Key), now, 220, 52));
             }
             g.Children.Add(spark);
             return Ui.Card(g, 16);
         }
+        // 1.4: the state as quiet text in its colour - a bolt while charging or full, a small dot otherwise
+        FrameworkElement StateLine(GearDevice d)
+        {
+            var pk = PillKeys(d); var key = pk[0] == "Lilac" ? "Muted" : pk[0];
+            var text = d.Waiting ? "Waiting · game running" : d.LastKnown && d.Connected ? "Last known · " + d.StateLabel : (d.Paused ? "Paused · " : "") + d.StateLabel;
+            var sp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            FrameworkElement mark = (d.Charging || d.Full) && d.Connected && !d.LastKnown ? Icons.Make("bolt", 11, Ui.R(key)) : (FrameworkElement)new Ellipse { Width = 7, Height = 7, Fill = Ui.R(key) };
+            mark.VerticalAlignment = VerticalAlignment.Center; mark.Margin = new Thickness(0, 1, 6, 0);
+            sp.Children.Add(mark);
+            sp.Children.Add(new TextBlock { Text = text, FontSize = 12, Foreground = Ui.R(key), FontWeight = key == "Muted" ? FontWeights.Normal : FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+            return sp;
+        }
         FrameworkElement Sparkline(List<History.Pt> pts, DateTime now, double w, double h)
         {
-            var cv = new Canvas { Width = w, Height = h, Background = Ui.R("Well"), Margin = new Thickness(0, 6, 0, 0), ClipToBounds = true };
-            foreach (var y in new[] { 0.5 }) cv.Children.Add(new Line { X1 = 0, X2 = w, Y1 = h * y, Y2 = h * y, Stroke = Ui.R("LineDim"), StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 2, 3 } });
-            if (pts.Count < 2) { var t = Ui.Muted(pts.Count == 0 ? "No history yet" : "History starts now", 11); Canvas.SetLeft(t, 8); Canvas.SetTop(t, h / 2 - 8); cv.Children.Add(t); return cv; }
+            var cv = new Canvas { Width = w, Height = h, Margin = new Thickness(0, 8, 0, 0), ClipToBounds = true };
+            cv.Children.Add(new Line { X1 = 0, X2 = w, Y1 = h / 2, Y2 = h / 2, Stroke = Ui.R("LineDim"), StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 2, 3 } });
+            cv.Children.Add(new Line { X1 = 0, X2 = w, Y1 = h - 0.5, Y2 = h - 0.5, Stroke = Ui.R("LineDim"), StrokeThickness = 1 });
+            if (pts.Count < 2) { var t = Ui.Muted(pts.Count == 0 ? "No history yet" : "History starts now", 11); Canvas.SetLeft(t, 0); Canvas.SetTop(t, h / 2 - 20); cv.Children.Add(t); return cv; }
             var t0 = now.AddHours(-24);
             Func<History.Pt, Point> P = p => new Point(Math.Max(0, Math.Min(w, (p.T - t0).TotalMinutes / (24 * 60) * w)), 3 + (h - 6) * (1 - p.P / 100.0));
             var line = new Polyline { Stroke = Ui.R("Lilac"), StrokeThickness = 1.6, StrokeLineJoin = PenLineJoin.Round };
@@ -236,33 +248,34 @@ namespace HallowGear
             foreach (var p in pts) { var q = P(p); line.Points.Add(q); fill.Points.Add(q); }
             fill.Points.Add(new Point(P(pts[pts.Count - 1]).X, h));
             cv.Children.Add(fill); cv.Children.Add(line);
-            var lastPt = P(pts[pts.Count - 1]); var dot = new Ellipse { Width = 5, Height = 5, Fill = Ui.R("AccentBrush") }; Canvas.SetLeft(dot, lastPt.X - 2.5); Canvas.SetTop(dot, lastPt.Y - 2.5); cv.Children.Add(dot);
+            var lastPt = P(pts[pts.Count - 1]); var dot = new Ellipse { Width = 6, Height = 6, Fill = Ui.R("Lilac") }; Canvas.SetLeft(dot, Math.Min(w - 6, lastPt.X - 3)); Canvas.SetTop(dot, lastPt.Y - 3); cv.Children.Add(dot);
             return cv;
         }
 
         // ---------------- Settings
         FrameworkElement Section(string caps, params UIElement[] items)
         {
-            var sp = new StackPanel(); sp.Children.Add(Ui.Caps(caps, 11)); var inner = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
-            foreach (var i in items) inner.Children.Add(i); sp.Children.Add(inner);
-            var card = Ui.Card(sp, 16); card.Margin = new Thickness(0, 0, 0, 14); return card;
+            // 1.4: the label above a calm card (no lines)
+            var sp = new StackPanel { Margin = new Thickness(0, 0, 0, 20) };
+            var label = Ui.Caps(caps, 11); label.Margin = new Thickness(2, 0, 0, 8); sp.Children.Add(label);
+            var inner = new StackPanel(); foreach (var i in items) inner.Children.Add(i);
+            sp.Children.Add(Ui.Card(inner, 16)); return sp;
         }
         FrameworkElement Chips(string label, int[] values, int current, Func<int, string> text, Action<int> pick)
         {
-            var row = new WrapPanel { Margin = new Thickness(0, 6, 0, 6) };
-            row.Children.Add(new TextBlock { Text = label, Width = 150, VerticalAlignment = VerticalAlignment.Center });
+            var chips = new WrapPanel();
             foreach (var v in values)
             {
-                var vv = v; var b = new ToggleButton { Content = text(v), Style = Ui.S("Chip"), IsChecked = v == current, Margin = new Thickness(0, 0, 6, 0) };
+                var vv = v; var b = new ToggleButton { Content = text(v), Style = Ui.S("Pill"), IsChecked = v == current, Margin = new Thickness(0, 2, 6, 2) };
                 b.Click += (s, e) => { pick(vv); BuildPage(); };
-                row.Children.Add(b);
+                chips.Children.Add(b);
             }
-            return row;
+            return Labeled(label, 150, chips);
         }
         FrameworkElement SettingsPage()
         {
-            var S = c.S; var sp = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
-            sp.Children.Add(new TextBlock { Text = "Settings", FontSize = 22, FontFamily = Ui.Head, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 14) });
+            var S = c.S; var sp = new StackPanel { Margin = new Thickness(24, 20, 24, 24), MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Left };
+            sp.Children.Add(new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 16) });
             sp.Children.Add(Section("Alerts",
                 Ui.Switch("Low battery alerts (once per discharge at each level)", S.AlertLow, v => { S.AlertLow = v; c.SaveSettings(); }),
                 Chips("Low at", new[] { 10, 15, 20, 25, 30 }, S.Low1, v => Fmt.Pct(v), v => { S.Low1 = v; if (S.Low2 >= v) S.Low2 = Math.Max(1, v - 5); c.SaveSettings(); }),
@@ -278,11 +291,10 @@ namespace HallowGear
                 Chips("Check every", new[] { 60, 120, 300 }, S.PollSeconds, v => v / 60 + " min", v => { S.PollSeconds = v; c.SaveSettings(); }),
                 Ui.Muted("On battery power (a laptop) it checks every 5 minutes at most. It also checks when gear is plugged in or out. While a game runs, see While I'm gaming. The headset's base station is a separate USB device and is read at most every 2 minutes during games.", 11.5, 0)));
             sp.Children.Add(BluetoothSection());
-            var looks = new WrapPanel { Margin = new Thickness(0, 6, 0, 6) };
-            looks.Children.Add(new TextBlock { Text = "Look", Width = 150, VerticalAlignment = VerticalAlignment.Center });
+            var looks = new WrapPanel();
             foreach (var l in new[] { new[] { "hallow", "Follow Hallow" }, new[] { "light", "Light" }, new[] { "dark", "Dark" } })
             {
-                var id = l[0]; var b = new ToggleButton { Content = l[1], Style = Ui.S("Chip"), IsChecked = S.Look == id, Margin = new Thickness(0, 0, 6, 0) };
+                var id = l[0]; var b = new ToggleButton { Content = l[1], Style = Ui.S("Pill"), IsChecked = S.Look == id, Margin = new Thickness(0, 2, 6, 2) };
                 b.Click += (s, e) => { c.SetLook(id); if (!Snap.On) Dispatcher.BeginInvoke(new Action(() => { Show("settings"); })); };
                 looks.Children.Add(b);
             }
@@ -290,10 +302,10 @@ namespace HallowGear
                 Ui.Switch("Start Hallow Gear when I sign in to Windows (in the tray)", c.StartsWithWindows(), v => { c.SetStartWithWindows(v); c.WriteStatus(); }),
                 Ui.Switch("Use the Hallow icon (Hallow Hub's tray menu lists Hallow Gear)", S.UseHallowIcon, v => { S.UseHallowIcon = v; c.SaveSettings(); c.CheckHost(); }),
                 Ui.Switch("Use the Hallow accent colour", S.UseHallowAccent, v => { S.UseHallowAccent = v; c.SaveSettings(); c.ApplyAccent(); }),
-                looks));
-            var btns = new WrapPanel();
-            btns.Children.Add(Ui.Btn("Check for updates", () => c.CheckForUpdate(true)));
-            btns.Children.Add(Ui.Btn("Open data folder", () => { try { System.IO.Directory.CreateDirectory(GearSettings.Dir); System.Diagnostics.Process.Start("explorer.exe", "\"" + GearSettings.Dir + "\""); } catch { } }));
+                Labeled("Look", 150, looks)));
+            var btns = new WrapPanel { Margin = new Thickness(-10, -8, 0, 0) };
+            btns.Children.Add(Ui.Ghost("Check for updates", () => c.CheckForUpdate(true)));
+            btns.Children.Add(Ui.Ghost("Open data folder", () => { try { System.IO.Directory.CreateDirectory(GearSettings.Dir); System.Diagnostics.Process.Start("explorer.exe", "\"" + GearSettings.Dir + "\""); } catch { } }));
             sp.Children.Add(btns);
             return sp;
         }
@@ -301,21 +313,32 @@ namespace HallowGear
         // 1.3: a row of chips for a string setting
         FrameworkElement Pick(string label, string[] values, string current, Func<string, string> text, Action<string> pick, double labelWidth = 150, string tip = null)
         {
-            var row = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
-            if (label != null) row.Children.Add(new TextBlock { Text = label, Width = labelWidth, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
+            var chips = new WrapPanel();
             foreach (var v in values)
             {
-                var vv = v; var b = new ToggleButton { Content = text(v), Style = Ui.S("Chip"), IsChecked = v == current, Margin = new Thickness(0, 2, 6, 2) };
+                var vv = v; var b = new ToggleButton { Content = text(v), Style = Ui.S("Pill"), IsChecked = v == current, Margin = new Thickness(0, 2, 6, 2) };
                 if (tip != null) b.ToolTip = tip;
                 b.Click += (s, e) => { pick(vv); BuildPage(); };
-                row.Children.Add(b);
+                chips.Children.Add(b);
             }
+            return Labeled(label, labelWidth, chips);
+        }
+        // 1.4: a label column and its chips; chips that wrap stay in their column (narrow windows). Tag = the chips' panel.
+        static FrameworkElement Labeled(string label, double labelWidth, WrapPanel chips)
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 4, 0, 4), Tag = chips };
+            if (label != null)
+            {
+                var t = new TextBlock { Text = label, Width = labelWidth, VerticalAlignment = VerticalAlignment.Top, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 7, 0, 0) };
+                DockPanel.SetDock(t, Dock.Left); row.Children.Add(t);
+            }
+            row.Children.Add(chips);
             return row;
         }
         static readonly string[] Corners = { "top-right", "top-left", "bottom-right", "bottom-left" };
         static string CornerLabel(string c) { switch (c) { case "top-left": return "Top left"; case "bottom-right": return "Bottom right"; case "bottom-left": return "Bottom left"; } return "Top right"; }
         public static string GameAskLabel(string v) { return v == "5min" ? "Every 5 min" : v == "never" ? "Never" : "Once when Gear starts"; }
-        FrameworkElement Sub(string text) { var t = Ui.Caps(text, 10, Ui.R("Muted")); t.Margin = new Thickness(0, 14, 0, 4); return t; }
+        FrameworkElement Sub(string text) { var t = Ui.Caps(text, 10.5, Ui.R("Muted")); t.Margin = new Thickness(0, 18, 0, 6); return t; }
 
         // 1.3: Settings > While I'm gaming - per alert type, the pop-up's monitor / corner / time, the single-monitor fallback
         FrameworkElement GamingSection()
@@ -342,9 +365,9 @@ namespace HallowGear
                 var m = mons.FirstOrDefault(x => x.Device == v); return m != null ? "Screen " + m.Number + (m.Primary ? " (main)" : "") : "Screen " + Mon.NumberOf(v) + " (not connected)";
             };
             items.Add(Pick("Screen", screens.ToArray(), S.PopupMonitor, screenLabel, v => { S.PopupMonitor = v; c.SaveSettings(); }));
-            var idRow = new WrapPanel { Margin = new Thickness(150, 2, 0, 4) };
-            var ident = Ui.Btn("Identify", () => c.Identify(), false, "Shows each screen's number on it for a moment"); idRow.Children.Add(ident);
-            var tryIt = Ui.Btn("Try a pop-up", () => { var where = c.TryPopup(); Say(where == null ? "No screen for the pop-up right now." : "A sample pop-up is on " + where + "."); }, false, "Shows a sample pop-up where it would go now");
+            var idRow = new WrapPanel { Margin = new Thickness(140, 0, 0, 4) };
+            var ident = Ui.Ghost("Identify", () => c.Identify(), "Shows each screen's number on it for a moment"); idRow.Children.Add(ident);
+            var tryIt = Ui.Ghost("Try a pop-up", () => { var where = c.TryPopup(); Say(where == null ? "No screen for the pop-up right now." : "A sample pop-up is on " + where + "."); }, "Shows a sample pop-up where it would go now");
             idRow.Children.Add(tryIt);
             idRow.Children.Add(new TextBlock { Text = mons.Count + " screen" + (mons.Count == 1 ? "" : "s") + ": " + string.Join(",  ", mons.Select(m => m.Label)), Foreground = Ui.R("Muted"), FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0), TextWrapping = TextWrapping.Wrap });
             items.Add(idRow);
@@ -361,9 +384,9 @@ namespace HallowGear
             var outside = Pick("Outside games", GearSound.Normal, S.SoundNormal, v => GearSound.Label(v, false), v => { S.SoundNormal = v; c.SaveSettings(); });
             var during = Pick("During games", GearSound.Game, S.SoundGame, v => GearSound.Label(v, true), v => { S.SoundGame = v; c.SaveSettings(); });
             var vol1 = Pick("Hallow sound volume", new[] { "40", "70", "100" }, S.SoundVolume.ToString(), v => v + "%", v => { S.SoundVolume = int.Parse(v); c.SaveSettings(); });
-            ((Panel)vol1).Children.Add(Ui.Btn("Play", play(GearSound.Hallow, S.SoundVolume), false, "Plays the Hallow sound at this volume"));
+            ((Panel)((FrameworkElement)vol1).Tag).Children.Add(Ui.Ghost("Play", play(GearSound.Hallow, S.SoundVolume), "Plays the Hallow sound at this volume"));
             var vol2 = Pick("In-game volume", new[] { "10", "20", "30", "50" }, S.GameVolume.ToString(), v => v + "%", v => { S.GameVolume = int.Parse(v); c.SaveSettings(); });
-            ((Panel)vol2).Children.Add(Ui.Btn("Play", play(S.SoundGame == GearSound.Silent ? GearSound.Hallow : S.SoundGame, S.GameVolume), false, "Plays the in-game sound (the pop-up's) at this volume"));
+            ((Panel)((FrameworkElement)vol2).Tag).Children.Add(Ui.Ghost("Play", play(S.SoundGame == GearSound.Silent ? GearSound.Hallow : S.SoundGame, S.GameVolume), "Plays the in-game sound (the pop-up's) at this volume"));
             return Section("Sound", outside, vol1, during, vol2,
                 Ui.Muted("Windows notifications use Windows' own sound or none. The Hallow sound and the pop-up's sound are Gear's own, played on your default audio device at the volume above. Hallow Gear never changes the game's or Windows' volume - its sound is made quieter before it plays.", 11.5, 0));
         }
@@ -382,12 +405,12 @@ namespace HallowGear
                 var key = d.Key; bool on = c.AlertsOn(d), open = openDevices.Contains(key); string all; S.DeviceGame.TryGetValue(key, out all);
                 var row = new DockPanel { Margin = new Thickness(0, 8, 0, 2) };
                 var btns = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(btns, Dock.Right);
-                var al = new ToggleButton { Content = on ? "Alerts on" : "Alerts off", Style = Ui.S("Chip"), IsChecked = on, Margin = new Thickness(0, 0, 6, 0), ToolTip = "This device's battery alerts" };
+                var al = new ToggleButton { Content = on ? "Alerts on" : "Alerts off", Style = Ui.S("Pill"), IsChecked = on, Margin = new Thickness(0, 0, 6, 0), ToolTip = "This device's battery alerts" };
                 al.Click += (s, e) => { c.SetBtAlerts(key, !on); BuildPage(); };
-                var more = new ToggleButton { Content = open ? "Per alert \u25B4" : "Per alert \u25BE", Style = Ui.S("Chip"), IsChecked = open || S.DeviceGame.Keys.Any(k => k.StartsWith(key + "|")), IsEnabled = on, ToolTip = "A game behaviour for each of its alerts" };
+                var more = new ToggleButton { Content = open ? "Per alert \u25B4" : "Per alert \u25BE", Style = Ui.S("Pill"), IsChecked = open || S.DeviceGame.Keys.Any(k => k.StartsWith(key + "|")), IsEnabled = on, ToolTip = "A game behaviour for each of its alerts" };
                 more.Click += (s, e) => { if (open) openDevices.Remove(key); else openDevices.Add(key); BuildPage(); };
                 btns.Children.Add(al); btns.Children.Add(more); row.Children.Add(btns);
-                var label = Icons.WithText(KindIcon(d), d.Name, 14, Ui.R(on ? "AccentBrush" : "Faint")); label.VerticalAlignment = VerticalAlignment.Center; row.Children.Add(label);
+                var label = Icons.WithText(KindIcon(d), d.Name, 14, Ui.R(on ? "TextSoft" : "Faint")); label.VerticalAlignment = VerticalAlignment.Center; row.Children.Add(label);
                 items.Add(row);
                 if (!on) continue;
                 var allRow = Pick("During games", modes, GameModes.Valid(all) ? all : "default", GameModes.Label, v => c.SetDeviceGame(key, null, v), 150);
@@ -416,12 +439,12 @@ namespace HallowGear
                 var key = d.Key; bool hidden = S.BtHidden.Contains(key), alertsOn = !S.BtNoAlerts.Contains(key);
                 var row = new DockPanel { Margin = new Thickness(0, 4, 0, 4) };
                 var btns = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(btns, Dock.Right);
-                var show = new ToggleButton { Content = hidden ? "Hidden" : "Shown", Style = Ui.S("Chip"), IsChecked = !hidden, Margin = new Thickness(0, 0, 6, 0), ToolTip = "Show this device's card (and its battery in Hallow Overlay)" };
+                var show = new ToggleButton { Content = hidden ? "Hidden" : "Shown", Style = Ui.S("Pill"), IsChecked = !hidden, Margin = new Thickness(0, 0, 6, 0), ToolTip = "Show this device's card (and its battery in Hallow Overlay)" };
                 show.Click += (s, e) => { c.SetBtHidden(key, !hidden); BuildPage(); };
-                var al = new ToggleButton { Content = alertsOn ? "Alerts on" : "Alerts off", Style = Ui.S("Chip"), IsChecked = alertsOn && !hidden, IsEnabled = !hidden, ToolTip = "Low battery alerts for this device" };
+                var al = new ToggleButton { Content = alertsOn ? "Alerts on" : "Alerts off", Style = Ui.S("Pill"), IsChecked = alertsOn && !hidden, IsEnabled = !hidden, ToolTip = "Low battery alerts for this device" };
                 al.Click += (s, e) => { c.SetBtAlerts(key, !alertsOn); BuildPage(); };
                 btns.Children.Add(show); btns.Children.Add(al); row.Children.Add(btns);
-                var label = Icons.WithText(KindIcon(d), d.Name + "  \u00B7  " + Fmt.Pct(d.Battery, "\u2013%") + (d.Connected ? "" : " (not connected)"), 14, Ui.R(hidden ? "Faint" : "AccentBrush"));
+                var label = Icons.WithText(KindIcon(d), d.Name + "  \u00B7  " + Fmt.Pct(d.Battery, "\u2013%") + (d.Connected ? "" : " (not connected)"), 14, Ui.R(hidden ? "Faint" : "TextSoft"));
                 label.VerticalAlignment = VerticalAlignment.Center; row.Children.Add(label);
                 items.Add(row);
             }
@@ -431,15 +454,16 @@ namespace HallowGear
         // ---------------- What it can read (the honest list)
         FrameworkElement AboutPage()
         {
-            var sp = new StackPanel { Margin = new Thickness(26, 22, 26, 22), MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Left };
-            sp.Children.Add(new TextBlock { Text = "What Hallow Gear can read", FontSize = 22, FontFamily = Ui.Head, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
-            sp.Children.Add(Ui.Muted("It only reads. Every message it can send to a device is on a fixed read-only list in its code - nothing that changes DPI, lighting, profiles, pairing, sound or any other setting can even be built. It runs next to Logitech G HUB: devices are opened shared and asked a few small questions a minute.", 12.5, 14));
+            var sp = new StackPanel { Margin = new Thickness(24, 20, 24, 24), MaxWidth = 800, HorizontalAlignment = HorizontalAlignment.Left };
+            sp.Children.Add(new TextBlock { Text = "What Hallow Gear can read", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+            sp.Children.Add(Ui.Muted("It only reads. Every message it can send to a device is on a fixed read-only list in its code - nothing that changes DPI, lighting, profiles, pairing, sound or any other setting can even be built. It runs next to Logitech G HUB: devices are opened shared and asked a few small questions a minute.", 12.5, 16));
             Func<string, string, string[], FrameworkElement> Item = (icon, head, lines) =>
             {
-                var s = new StackPanel(); s.Children.Add(Icons.WithText(icon, head, 16, Ui.R("AccentBrush")));
+                var s = new StackPanel(); s.Children.Add(Icons.WithText(icon, head, 15, Ui.R("Muted")));
                 ((TextBlock)((StackPanel)s.Children[0]).Children[1]).FontWeight = FontWeights.SemiBold; ((TextBlock)((StackPanel)s.Children[0]).Children[1]).FontSize = 14;
-                foreach (var l in lines) s.Children.Add(new TextBlock { Text = "\u2022 " + l, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(26, 5, 0, 0), Foreground = Ui.R("TextSoft") });
-                var card = Ui.Card(s, 16); card.Margin = new Thickness(0, 0, 0, 12); return card;
+                ((TextBlock)((StackPanel)s.Children[0]).Children[1]).Foreground = Ui.R("Text");
+                foreach (var l in lines) s.Children.Add(new TextBlock { Text = "\u2022 " + l, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24, 6, 0, 0), Foreground = Ui.R("TextSoft") });
+                var card = Ui.Card(s, 16); card.Margin = new Thickness(0, 0, 0, 10); return card;
             };
             sp.Children.Add(Item("computer-mouse", "LIGHTSPEED mouse (Logitech HID++ 2.0)", new[] {
                 "Its name, and its battery from the mouse itself: Unified Battery (0x1004) when it has it - percent, charging / full / discharging, external power - or Battery Status (0x1000), or Battery Voltage (0x1001, then the percent is an estimate).",

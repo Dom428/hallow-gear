@@ -40,6 +40,12 @@ GOOD TO KNOW
 - Not supported: other brands' 2.4 GHz dongles (Razer, SteelSeries, Corsair...), the A50 Gen 4
   and the A50 X.
 
+WHAT'S NEW IN 1.4
+- A cleaner, calmer look matching Hallow Hub: text tabs on top, calm cards without outlines,
+  the battery as a slim bar with the charging state next to the name, quiet choice chips in
+  Settings, a calmer pop-up while you game, slim scroll bars - in light and dark mode.
+  Everything works as before.
+
 WHAT'S NEW IN 1.3.2
 - Percentages read 45% instead of 45 %.
 

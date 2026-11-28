@@ -49,10 +49,10 @@ namespace HallowGear
         }
         public static TextBlock Muted(string text, double size = 12, double bottom = 0) { return T(text, size, false, R("Muted"), bottom); }
         public static TextBlock Num(string text, double size = 12, Brush fg = null) { var t = new TextBlock { Text = text, FontSize = size, FontFamily = Mono }; if (fg != null) t.Foreground = fg; return t; }
-        // a heading in the console style: spaced capitals in the head font
+        // a section label (the modern Hallow look): small semibold capitals in Muted
         public static TextBlock Caps(string text, double size = 11, Brush fg = null)
         {
-            return new TextBlock { Text = Spaced(text.ToUpperInvariant()), FontSize = size, FontFamily = Head, Foreground = fg ?? R("Lilac"), FontWeight = FontWeights.SemiBold };
+            return new TextBlock { Text = text.ToUpperInvariant(), FontSize = size, Foreground = fg ?? R("Muted"), FontWeight = FontWeights.SemiBold };
         }
         public static string Spaced(string s) { var sb = new System.Text.StringBuilder(); foreach (var c in s) { if (sb.Length > 0) sb.Append('\u200A'); sb.Append(c); } return sb.ToString(); }
         public static Button Btn(string label, Action click, bool accent = false, string tip = null)
@@ -63,15 +63,17 @@ namespace HallowGear
             return b;
         }
         public static Button Danger(string label, Action click) { var b = Btn(label, click); b.Style = S("Danger"); return b; }
+        // a quiet secondary action: no fill or line until the mouse is on it
+        public static Button Ghost(string label, Action click, string tip = null) { var b = Btn(label, click, false, tip); b.Style = S("Ghost"); return b; }
         public static StackPanel Row(params UIElement[] items) { var p = new StackPanel { Orientation = Orientation.Horizontal }; foreach (var i in items) p.Children.Add(i); return p; }
         public static Border Card(UIElement child, double pad = 16)
         {
-            return new Border { Child = child, Background = R("Panel"), BorderBrush = R("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3), Padding = new Thickness(pad) };
+            return new Border { Child = child, Background = R("Panel"), CornerRadius = new CornerRadius(10), Padding = new Thickness(pad) };
         }
-        // a small coloured label ("Anti-cheat - leave alone", "Game", "Lowered")
+        // a small coloured label: a soft tint, no line
         public static Border Pill(string text, string fgKey, string bgKey)
         {
-            return new Border { Background = R(bgKey), BorderBrush = R(fgKey), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Padding = new Thickness(7, 1, 7, 2), VerticalAlignment = VerticalAlignment.Center,
+            return new Border { Background = R(bgKey), CornerRadius = new CornerRadius(6), Padding = new Thickness(8, 2, 8, 3), VerticalAlignment = VerticalAlignment.Center,
                 Child = new TextBlock { Text = text, FontSize = 11, Foreground = R(fgKey), FontWeight = FontWeights.SemiBold } };
         }
         public static FrameworkElement Header(string word, double size = 20)

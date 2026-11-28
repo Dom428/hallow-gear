@@ -15,7 +15,7 @@ namespace HallowGear
             sp.Children.Add(Ui.T(title, 15, true, null, 6)); sp.Children.Add(Ui.Muted(text, 12.5));
             var row = new WrapPanel { Margin = new Thickness(0, 16, 0, 0), HorizontalAlignment = HorizontalAlignment.Right }; sp.Children.Add(row);
             bool answer = false;
-            row.Children.Add(Ui.Btn("Cancel", () => w.Close()));
+            row.Children.Add(Ui.Ghost("Cancel", () => w.Close()));
             var ok = Ui.Btn(okLabel, () => { answer = true; w.Close(); }, true); ok.Margin = new Thickness(0); ok.MinWidth = 90; row.Children.Add(ok);
             w.Closed += (s, e) => { if (done != null) done(answer); };
             return w;
@@ -39,8 +39,8 @@ namespace HallowGear
             DateTime when = DateTime.Now; try { if (File.Exists(file)) when = File.GetLastWriteTime(file); } catch { }
             sp.Children.Add(Ui.Muted("On " + when.ToString("d MMM yyyy, HH:mm") + ". A report was saved on this PC - nothing was sent anywhere.", 12.5, 14));
             var row = new WrapPanel();
-            row.Children.Add(Ui.Btn("Show details", () => { try { System.Diagnostics.Process.Start("notepad.exe", "\"" + file + "\""); } catch { } }));
-            row.Children.Add(Ui.Btn("Open folder", () => { try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + file + "\""); } catch { } }));
+            row.Children.Add(Ui.Ghost("Show details", () => { try { System.Diagnostics.Process.Start("notepad.exe", "\"" + file + "\""); } catch { } }));
+            row.Children.Add(Ui.Ghost("Open folder", () => { try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + file + "\""); } catch { } }));
             var ok = Ui.Btn("OK", () => w.Close(), true); ok.MinWidth = 70; row.Children.Add(ok);
             sp.Children.Add(row); w.Content = sp;
             return w;

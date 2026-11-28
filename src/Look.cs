@@ -72,8 +72,9 @@ namespace HallowGear
 
         // ---- the light palette (same keys as Theme.xaml; #F07820 / its alpha forms are swapped for the darkened accent later)
         public static readonly Dictionary<string, string> Light = new Dictionary<string, string> {
-            { "Bg", "#F6F4FA" }, { "Side", "#EFECF5" }, { "Panel", "#FFFFFF" }, { "PanelHi", "#EEEAF5" }, { "Well", "#FFFFFF" },
-            { "Line", "#DAD3E6" }, { "LineDim", "#E9E5F0" }, { "BtnBg", "#FFFFFF" }, { "BtnLine", "#C8BFD8" },
+            { "Bg", "#F4F2F8" }, { "Side", "#EFECF5" }, { "Panel", "#FFFFFF" }, { "PanelHi", "#EEEAF5" }, { "Well", "#FFFFFF" },
+            { "Line", "#DAD3E6" }, { "LineDim", "#E6E1EE" }, { "BtnBg", "#FFFFFF" }, { "BtnLine", "#D3CBE0" }, { "BtnHover", "#B5ABC8" },
+            { "Veil", "#1E1A26" }, { "SwitchOff", "#B4ADC2" }, { "SwitchKnob", "#FFFFFF" }, { "SwitchKnobOn", "#FFFFFF" },
             { "Text", "#1E1A26" }, { "TextSoft", "#3A3446" }, { "Muted", "#6B6478" }, { "Faint", "#9C95A8" },
             { "AccentGlow", "#26F07820" }, { "Lilac", "#6E50B5" }, { "LilacDim", "#B5A3DD" },
             { "Green", "#1B7A44" }, { "Amber", "#8F5B00" }, { "Red", "#C2333F" },
@@ -90,8 +91,7 @@ namespace HallowGear
         {
             foreach (var kv in Light)
                 xaml = Regex.Replace(xaml, "(x:Key=\"" + kv.Key + "\" Color=\")#[0-9A-Fa-f]{6,8}(\")", "${1}" + kv.Value + "${2}");
-            // the Accent button's text: dark text on the light accent tint (better than accent-on-accent); the soft accent = the text-safe one
-            xaml = xaml.Replace("<Setter Property=\"Foreground\" Value=\"#F59A50\"/>", "<Setter Property=\"Foreground\" Value=\"{StaticResource Text}\"/>");
+            // the soft accent = the text-safe one (the Accent button is filled, its text is OnAccent - worked out for the darkened accent)
             return Regex.Replace(xaml, "#F59A50", "#F07820", RegexOptions.IgnoreCase);
         }
 
@@ -162,7 +162,8 @@ namespace HallowGear
             list.Add(new object[] { "accent text (HALLOW, sort arrow) on Panel", A, panel, 4.5 });
             list.Add(new object[] { "accent text on Bg", A, bg, 4.5 });
             list.Add(new object[] { "accent text on Side", A, side, 4.5 });
-            list.Add(new object[] { "Accent button text on its tint", L("Text"), Over("#24" + A.Substring(1), Over("#47" + A.Substring(1), panel)), 4.5 });
+            list.Add(new object[] { "the chip that is on (Bg text on a Text fill)", bg, L("Text"), 4.5 });
+            list.Add(new object[] { "a chip's text on its PanelHi surface", L("TextSoft"), hi, 4.5 });
             list.Add(new object[] { "text on the selected row", L("Text"), Over(L("RowSel"), panel), 4.5 });
             list.Add(new object[] { "text on the busiest cell tint", L("Text"), Over(L("Heat3"), panel), 4.5 });
             foreach (var p in new[] { new[] { "Green", "GreenBg" }, new[] { "Amber", "AmberBg" }, new[] { "Red", "RedBg" }, new[] { "Lilac", "LilacBg" } })

@@ -19,12 +19,14 @@ namespace HallowGear
         public const string EarbudsPath = "F1 M0 0L0 0M512 512L512 512" +
             "M58 140A92 92 0 1 1 242 140A92 92 0 1 1 58 140Z M180 150L236 150L236 412A28 28 0 0 1 180 412Z M94 128A34 34 0 1 0 162 128A34 34 0 1 0 94 128Z" +
             "M270 140A92 92 0 1 1 454 140A92 92 0 1 1 270 140Z M276 150L332 150L332 412A28 28 0 0 1 276 412Z M350 128A34 34 0 1 0 418 128A34 34 0 1 0 350 128Z";
-        static Icons() { Data["earbuds"] = EarbudsPath; }
+        // 1.4: a plain play triangle (Hallow's own, same 512 box) for the sound "Play" buttons
+        public const string PlayPath = "F1 M0 0L0 0M512 512L512 512 M136 72L440 256L136 440Z";
+        static Icons() { Data["earbuds"] = EarbudsPath; Data["play"] = PlayPath; }
 
         // exact label -> icon
         static readonly Dictionary<string, string> Labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
             { "Cancel", "xmark" }, { "Forget", "xmark" }, { "Refresh now", "arrows-rotate" }, { "Reading...", "arrows-rotate" }, { "Check for updates", "arrows-rotate" }, { "Open data folder", "folder-open" },
-            { "Show details", "eye" }, { "Open folder", "folder-open" }, { "OK", "check" }, { "Update", "download" }, { "Open the HeadsetControl project", "github" },
+            { "Show details", "eye" }, { "Open folder", "folder-open" }, { "OK", "check" }, { "Update", "download" }, { "Open the HeadsetControl project", "github" }, { "Play", "play" },
         };
         static readonly string[][] Prefixes = { new[] { "Update to", "download" } };
         public static string ForLabel(string label)

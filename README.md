@@ -12,6 +12,10 @@ middle of a game, it still shows every paired device at once and remembers your 
 reads**: it can't change a single setting on your gear. Light and dark mode. Its notifications show **the device's own icon** - a
 mouse, a headset, earbuds, a controller - in red when the battery is low and in green when it's charging or full.
 
+**New in 1.4:** a cleaner, calmer look matching Hallow Hub 2.28 - text tabs on top, calm cards without outlines, the battery as a
+slim bar with the charging state beside the name, quiet choice chips in Settings, a calmer pop-up, slim scroll bars and a slim status
+bar, in light and dark mode. Nothing it does has changed.
+
 ![Your gear (made-up data)](docs/devices.png)
 
 ## Supported devices

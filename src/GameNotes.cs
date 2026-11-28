@@ -344,11 +344,11 @@ namespace HallowGear
         // ---- what it looks like: the 1.2 toast in the Hallow look (theme brushes, so light / dark follow Gear's look)
         public static FrameworkElement Card(string kind, string state, string title, string text, Action dismiss, Action open)
         {
-            var card = new Border { Width = 360, Background = Ui.R("Panel"), BorderBrush = Ui.R("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Focusable = false, Cursor = Cursors.Arrow };
-            var stripe = new Border { Width = 3, Background = Ui.R(state == "low" || state == "critical" ? "Red" : state == "charging" || state == "full" ? "Green" : "AccentBrush"), CornerRadius = new CornerRadius(6, 0, 0, 6) };
-            var dock = new DockPanel(); DockPanel.SetDock(stripe, Dock.Left); dock.Children.Add(stripe);
-            var sp = new StackPanel { Margin = new Thickness(14, 10, 12, 12) };
-            var head = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+            // 1.4 (the modern Hallow look): a calm card - no colour stripe (the device icon carries the state), rounded, one thin edge so
+            // it reads on any wallpaper or game; the device icon in its own soft tile, the action as the one accent
+            var card = new Border { Width = 360, Background = Ui.R("Panel"), BorderBrush = Ui.R("LineDim"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Focusable = false, Cursor = Cursors.Arrow };
+            var sp = new StackPanel { Margin = new Thickness(16, 12, 12, 14) };
+            var head = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
             var x = new TextBlock { Text = "\u2715", Foreground = Ui.R("Muted"), FontSize = 12, Padding = new Thickness(6, 0, 2, 4), ToolTip = "Dismiss", Cursor = Cursors.Hand, Focusable = false };
             if (dismiss != null) x.MouseLeftButtonUp += (s, e) => { e.Handled = true; dismiss(); };
             DockPanel.SetDock(x, Dock.Right); head.Children.Add(x);
@@ -357,15 +357,20 @@ namespace HallowGear
             head.Children.Add(new TextBlock { Text = " GEAR", FontSize = 11.5, FontWeight = FontWeights.Light, Foreground = Ui.R("TextSoft"), FontFamily = Ui.Head, VerticalAlignment = VerticalAlignment.Center });
             sp.Children.Add(head);
             var row = new DockPanel();
-            if (kind != null) { var icon = DeviceIcons.Element(kind, state ?? "normal", 44, Program.Light, Program.AccentHex); icon.Margin = new Thickness(0, 1, 12, 0); icon.VerticalAlignment = VerticalAlignment.Top; DockPanel.SetDock(icon, Dock.Left); row.Children.Add(icon); }
+            if (kind != null)
+            {
+                var icon = DeviceIcons.Element(kind, state ?? "normal", 34, Program.Light, Program.AccentHex); icon.HorizontalAlignment = HorizontalAlignment.Center; icon.VerticalAlignment = VerticalAlignment.Center;
+                var tile = new Border { Width = 48, Height = 48, CornerRadius = new CornerRadius(10), Background = Ui.R("PanelHi"), Child = icon, Margin = new Thickness(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Top, Focusable = false };
+                DockPanel.SetDock(tile, Dock.Left); row.Children.Add(tile);
+            }
             var txt = new StackPanel();
-            txt.Children.Add(new TextBlock { Text = title ?? "", Foreground = Ui.R("Text"), FontSize = 14, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-            txt.Children.Add(new TextBlock { Text = text ?? "", Foreground = Ui.R("TextSoft"), FontSize = 13, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) });
-            var link = new TextBlock { Text = "Open Hallow Gear", Foreground = Ui.R("AccentBrush"), FontSize = 12, Margin = new Thickness(0, 6, 0, 0), Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Left, Focusable = false };
+            txt.Children.Add(new TextBlock { Text = title ?? "", Foreground = Ui.R("Text"), FontSize = 14.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+            txt.Children.Add(new TextBlock { Text = text ?? "", Foreground = Ui.R("TextSoft"), FontSize = 12.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) });
+            var link = new TextBlock { Text = "Open Hallow Gear", Foreground = Ui.R("AccentBrush"), FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0), Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Left, Focusable = false };
             if (open != null) link.MouseLeftButtonUp += (s, e) => { e.Handled = true; open(); };   // a deliberate click: Gear's window opens (and takes focus)
             txt.Children.Add(link);
-            row.Children.Add(txt); sp.Children.Add(row); dock.Children.Add(sp);
-            card.Child = dock;
+            row.Children.Add(txt); sp.Children.Add(row);
+            card.Child = sp;
             if (dismiss != null) card.MouseLeftButtonUp += (s, e) => dismiss();   // a click anywhere else dismisses it - without activating anything
             TextElement.SetFontFamily(card, (FontFamily)Application.Current.FindResource("BodyFont"));
             return card;
@@ -376,7 +381,7 @@ namespace HallowGear
             var sp = new StackPanel { Margin = new Thickness(36, 18, 36, 22) };
             sp.Children.Add(new TextBlock { Text = n.ToString(), FontSize = 96, FontWeight = FontWeights.Bold, Foreground = Ui.R("AccentBrush"), HorizontalAlignment = HorizontalAlignment.Center, FontFamily = Ui.Head });
             sp.Children.Add(new TextBlock { Text = label, FontSize = 13, Foreground = Ui.R("TextSoft"), HorizontalAlignment = HorizontalAlignment.Center });
-            return new Border { Background = Ui.R("Panel"), BorderBrush = Ui.R("AccentBrush"), BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(8), Child = sp, Focusable = false };
+            return new Border { Background = Ui.R("Panel"), BorderBrush = Ui.R("LineDim"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Child = sp, Focusable = false };
         }
     }
 

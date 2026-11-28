@@ -28,7 +28,7 @@ namespace HallowGear
 {
     public static class Program
     {
-        public const string Version = "1.3.2";
+        public const string Version = "1.4";
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr v);
 
         [STAThread]
@@ -148,6 +148,8 @@ namespace HallowGear
             // 1.3: the per-device example (the mouse's very low battery as a pop-up, the headset on the Overlay line only), the mouse's row open
             c.S.DeviceGame["mouse:pro x superlight 2|critical"] = GameModes.Popup; c.S.DeviceGame["headset:astro a50"] = GameModes.Overlay; w.OpenDeviceRow("mouse:pro x superlight 2");
             foreach (var page in MainWindow.Pages.Select(p => p[0])) { w.Show(page); Snap.Save(w, F(page), 940, 0); }
+            // 1.4: the narrowest window (MinWidth): tabs, cards and settings rows must still fit
+            foreach (var page in new[] { "devices", "settings" }) { w.Show(page); Snap.Save(w, F(page + "-narrow"), w.MinWidth, 0); }
             Toasts.SavePng(PopupSample(), F("popup"), 2);
             // the mouse on its cable and charging, the headset low and undocked, a game running with the held alert
             fake.Devices[0].Wired = true; fake.Devices[0].Charging = true; fake.Devices[0].Battery = 71; fake.Devices[0].External = true; fake.Devices[0].Via = "USB cable + LIGHTSPEED receiver";
